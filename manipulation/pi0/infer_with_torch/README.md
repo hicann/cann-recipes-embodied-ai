@@ -154,8 +154,9 @@ chmod +x run_pi0_inference.sh
 |   |   |   |   ├── modeling_pi0.py           # pi0的模型训练及推理代码
 |   |   |   |   ├── paligemma_with_expert.py  # pi0的模型训练及推理代码
 ├── pi0_model                                 # koch机械臂抓取任务预训练pi0模型
-└── pyproject.toml                            # 运行环境第三方包的安装版本
-└── README.md                                 # 昇腾上运行pi0推理的环境配置及操作指导
-└── run_pi0_inference.sh                      # 昇腾上运行pi0推理过程一键启动脚本
+├── pyproject.toml                            # 运行环境第三方包的安装版本
+├── README_en.md                              # 昇腾上运行pi0推理的环境配置及操作指导 (英文版)
+├── README.md                                 # 昇腾上运行pi0推理的环境配置及操作指导 (中文版)
+├── run_pi0_inference.sh                      # 昇腾上运行pi0推理过程一键启动脚本
 └── test_pi0_on_ascend.py                     # 昇腾上运行pi0推理主代码
 ```
