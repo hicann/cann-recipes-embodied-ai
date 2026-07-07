@@ -91,7 +91,7 @@ class UnifiedSPAttention:
 
     def forward(
         self,
-        attention_params: AttentionParams,  # 核心修改：用dataclass封装所有参数
+        attention_params: AttentionParams,
         **kwargs
     ) -> torch.Tensor:
         """

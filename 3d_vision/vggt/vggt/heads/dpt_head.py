@@ -49,6 +49,7 @@ class DPTHead(nn.Module):
         intermediate_layer_idx: List[int] = [4, 11, 17, 23],
         pos_embed: bool = True,
         pos_embed_cache: Dict[Tuple, torch.Tensor] = None,
+        use_dpt_pos_embed_cache: bool = True,
         feature_only: bool = False,
         down_ratio: int = 1,
         sp_config: Optional['SPConfig'] = None,
@@ -63,6 +64,7 @@ class DPTHead(nn.Module):
         self.feature_only = feature_only
         self.down_ratio = down_ratio
         self.intermediate_layer_idx = intermediate_layer_idx
+        self.use_dpt_pos_embed_cache = use_dpt_pos_embed_cache
         self.pos_embed_cache = pos_embed_cache if pos_embed_cache is not None else {}
 
         self.norm = nn.LayerNorm(dim_in)
@@ -227,14 +229,12 @@ class DPTHead(nn.Module):
 
         out = self.scratch_forward(out)
         
-        out = out.half()
         out = custom_interpolate(
             out,
             (int(patch_h * self.patch_size / self.down_ratio), int(patch_w * self.patch_size / self.down_ratio)),
             mode="bilinear",
             align_corners=True,
         )
-        out = out.bfloat16()
 
         if self.pos_embed:
             out = self._apply_pos_embed(out, width, height)
@@ -284,15 +284,13 @@ class DPTHead(nn.Module):
 
     def _apply_pos_embed(self, x: torch.Tensor, W: int, H: int, ratio: float = 0.1) -> torch.Tensor:
         """Apply positional embedding to tensor x."""
+        # If cache is disabled, fall back to original (recompute every time)
+        if not self.use_dpt_pos_embed_cache:
+            return self._apply_pos_embed_original(x, W, H, ratio)
+
         cache_key = (W, H, x.shape)
         if cache_key not in self.pos_embed_cache:
-            patch_w = x.shape[-1]
-            patch_h = x.shape[-2]
-            pos_embed = create_uv_grid(patch_w, patch_h, aspect_ratio=W / H, dtype=x.dtype, device=x.device)
-            pos_embed = position_grid_to_embed(pos_embed, x.shape[1])
-            pos_embed = pos_embed * ratio
-            pos_embed = pos_embed.permute(2, 0, 1)[None].expand(x.shape[0], -1, -1, -1)
-            self.pos_embed_cache[cache_key] = pos_embed
+            self.pos_embed_cache[cache_key] = self._compute_pos_embed(x, W, H, ratio)
         pos_embed = self.pos_embed_cache[cache_key]
         return x + pos_embed
 
@@ -319,6 +317,21 @@ class DPTHead(nn.Module):
 
         out = self.scratch.output_conv1(out)
         return out
+
+    def _compute_pos_embed(self, x: torch.Tensor, W: int, H: int, ratio: float = 0.1) -> torch.Tensor:
+        """Compute positional embedding from input tensor."""
+        patch_w = x.shape[-1]
+        patch_h = x.shape[-2]
+        pos_embed = create_uv_grid(patch_w, patch_h, aspect_ratio=W / H, dtype=x.dtype, device=x.device)
+        pos_embed = position_grid_to_embed(pos_embed, x.shape[1])
+        pos_embed = pos_embed * ratio
+        pos_embed = pos_embed.permute(2, 0, 1)[None].expand(x.shape[0], -1, -1, -1)
+        return pos_embed
+
+    def _apply_pos_embed_original(self, x: torch.Tensor, W: int, H: int, ratio: float = 0.1) -> torch.Tensor:
+        """Original implementation: recompute positional embedding every time (baseline)."""
+        pos_embed = self._compute_pos_embed(x, W, H, ratio)
+        return x + pos_embed
 
 
 def _make_fusion_block(features: int, size: int = None, has_residual: bool = True, groups: int = 1) -> nn.Module:
@@ -424,14 +437,20 @@ def custom_interpolate(x: torch.Tensor, size: Tuple[int, int] = None, scale_fact
     if size is None:
         size = (int(x.shape[-2] * scale_factor), int(x.shape[-1] * scale_factor))
 
+    input_dtype = x.dtype
+    use_dtype_cast = input_dtype != torch.float32
+    if use_dtype_cast:
+        # NPU nn.functional.interpolate (bilinear) only supports FP16/FP32/FP64.
+        # Cast bf16 -> fp16 so the op can run on NPU AI Core; restore after.
+        x = x.half()
+
     INT_MAX = 1610612736
     input_elements = size[0] * size[1] * x.shape[0] * x.shape[1]
-    x = x.half()
     if input_elements > INT_MAX:
         chunks = torch.chunk(x, chunks=(input_elements // INT_MAX) + 1, dim=0)
         interpolated_chunks = [nn.functional.interpolate(chunk, size=size, mode=mode, align_corners=align_corners) for chunk in chunks]
-        x = torch.cat(interpolated_chunks, dim=0).bfloat16()
-        return x.contiguous()
+        x = torch.cat(interpolated_chunks, dim=0)
+        return x.to(input_dtype).contiguous() if use_dtype_cast else x.contiguous()
     else:
-        x = x.half()
-        return nn.functional.interpolate(x, size=size, mode=mode, align_corners=align_corners).bfloat16()
+        x = nn.functional.interpolate(x, size=size, mode=mode, align_corners=align_corners)
+        return x.to(input_dtype) if use_dtype_cast else x

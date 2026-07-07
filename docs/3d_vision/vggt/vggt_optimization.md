@@ -184,10 +184,19 @@ def _apply_pos_embed(self, x: torch.Tensor, W: int, H: int, ratio: float = 0.1) 
    return x + pos_embed
 ```
 ### Add+LayerNorm融合算子
-- **优化原因：** 将小算子替换为融合大算子，提升性能。
-- **优化方式：** 使用融合算子`npu_add_layer_norm`替换原来的算子实现。
+- **优化原因：** 将Add和LayerNorm两个小算子替换为融合大算子，减少算子下发次数和中间结果内存读写，提升性能。
+- **优化方式：** 使用融合算子`npu_add_layer_norm`替换原来的Add+LayerNorm分开执行的方式。
 ```python
-#替换后
+#替换前（两个算子分开执行）
+def original_layernorm_forward(self, x: torch.Tensor, residual: Optional[torch.Tensor] = None):
+    if residual is None:
+        return torch_npu.npu_layer_norm_eval(x, self.normalized_shape, self.weight, self.bias, self.eps)
+    else:
+        residual = residual + x  # 算子1: Add操作（单独执行）
+        y = torch_npu.npu_layer_norm_eval(residual, self.normalized_shape, self.weight, self.bias, self.eps)  # 算子2: LayerNorm（单独执行）
+        return y, residual
+
+#替换后（融合算子，Add+LayerNorm合并为1个算子）
 def vggt_layernorm_forward(self, x: torch.Tensor, residual: Optional[torch.Tensor] = None):
     if residual is None:
         return torch_npu.npu_layer_norm_eval(x, self.normalized_shape, self.weight, self.bias, self.eps)
@@ -197,6 +206,7 @@ def vggt_layernorm_forward(self, x: torch.Tensor, residual: Optional[torch.Tenso
 
 nn.LayerNorm.forward = vggt_layernorm_forward
 ```
+> **说明：** 优化前后都使用NPU兼容的`npu_layer_norm_eval`作为底层LayerNorm实现，区别仅在于Add操作是否融合（2个算子 → 1个融合算子）。
 ### 使用BF16权重
 - **优化原因：** 目前vggt网络的权重使用float数据类型，考虑将vggt网络权重转为bfloat16。
 - **优化方式：** 在加载完模型后，将模型权重转为bfloat16。使用该方案后，取得6.62%的性能收益，相机位姿估算任务精度相比fp32，精度从0.919下降至0.911，精度损失在0.5%以内。

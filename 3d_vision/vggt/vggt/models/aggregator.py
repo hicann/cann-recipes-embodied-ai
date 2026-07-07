@@ -80,13 +80,19 @@ class Aggregator(nn.Module):
         sp_ulysses_group: Optional[dist.ProcessGroup] = None,
         sp_ring_group: Optional[dist.ProcessGroup] = None,
         sp_global_group: Optional[dist.ProcessGroup] = None,
+        # Computation redundancy elimination switches
+        use_rope_cache: bool = True,
     ):
         super().__init__()
 
         self.__build_patch_embed__(patch_embed, img_size, patch_size, num_register_tokens, embed_dim=embed_dim)
 
-        self.rope = RotaryPositionEmbedding2D(frequency=rope_freq) if rope_freq > 0 else None
-        self.position_getter = PositionGetter() if self.rope is not None else None
+        # RoPE with cache switch
+        self.rope = RotaryPositionEmbedding2D(
+            frequency=rope_freq, 
+            use_rope_cache=use_rope_cache,
+        ) if rope_freq > 0 else None
+        self.position_getter = PositionGetter(use_cache=use_rope_cache) if self.rope is not None else None
 
         # Create Frame Blocks (NO sequence parallel)
         self.frame_blocks = nn.ModuleList([
@@ -239,7 +245,9 @@ class Aggregator(nn.Module):
         
         # Normalization and reshape - FULL sequence
         images = (images - self._resnet_mean) / self._resnet_std
-        images = images.view(batch_size * seq_len, channels_in, height, width).to(torch.bfloat16)
+        # Note: Keep input dtype consistent with model dtype (fp32 or bf16)
+        # Original code hardcoded bfloat16, which caused type mismatch when model is fp32
+        images = images.view(batch_size * seq_len, channels_in, height, width)
         
         # Patch Embedding - on FULL sequence (all ranks identical)
         patch_tokens = self.patch_embed(images)

@@ -1,0 +1,31 @@
+model_args:
+  ckpt: "VGGT_model_W8A8.pt"
+  images-path: "examples/kitchen/images"
+  enable-profiling: false
+  profile-dir: "prof_sp"
+  num-runs: 6
+
+optimization:
+  computation-redundancy-elimination:
+    rope-cache: true
+    dpt-pos-embed-cache: true
+    cos-sin-dtype-optimization: true
+
+  parallel-computation:
+    enable: false
+    ulysses-degree: 1
+    ring-degree: 1
+
+  quantization:
+    dtype: "bf16"
+    int8-w8a8:
+      enable: true
+      build: false
+
+  memory-and-data-format:
+    conv-weight-layout-preconvert: true
+
+model_name: "vggt"
+world_size: 1
+master_port: 29600
+entry_script: "demo_infer.py"

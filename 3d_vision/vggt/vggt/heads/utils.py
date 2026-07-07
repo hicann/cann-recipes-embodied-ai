@@ -12,6 +12,23 @@ import torch
 import torch.nn as nn
 
 
+# ========== Module-level switch for Cos/Sin dtype optimization ==========
+# True (optimized): use bfloat16 (NPU native support)
+# False (baseline): use double type (falls back to AI CPU)
+_USE_COS_SIN_DTYPE_OPTIMIZATION = True
+
+
+def set_cos_sin_dtype_optimization_enabled(enabled: bool):
+    """
+    Set whether to use Cos/Sin dtype optimization (bfloat16 instead of double).
+    
+    Args:
+        enabled: True = use bfloat16 (optimized), False = use double (baseline)
+    """
+    global _USE_COS_SIN_DTYPE_OPTIMIZATION
+    _USE_COS_SIN_DTYPE_OPTIMIZATION = enabled
+
+
 def position_grid_to_embed(pos_grid: torch.Tensor, embed_dim: int, omega_0: float = 100) -> torch.Tensor:
     """
     Convert 2D position grid (HxWx2) to sinusoidal embeddings (HxWxC)
@@ -50,7 +67,16 @@ def make_sincos_pos_embed(embed_dim: int, pos: torch.Tensor, omega_0: float = 10
     """
     assert embed_dim % 2 == 0
     device = pos.device
-    omega = torch.arange(embed_dim // 2, dtype=torch.bfloat16, device=device)
+    input_dtype = pos.dtype  # Remember input dtype for final output
+    
+    if _USE_COS_SIN_DTYPE_OPTIMIZATION:
+        # Optimized: use bfloat16 (NPU native support, runs on NPU)
+        omega = torch.arange(embed_dim // 2, dtype=torch.bfloat16, device=device)
+    else:
+        # Baseline: use double for high precision computation,
+        # then convert back to input dtype for type consistency with model weights
+        omega = torch.arange(embed_dim // 2, dtype=torch.double, device=device)
+    
     omega /= embed_dim / 2.0
     omega = 1.0 / omega_0**omega  # (D/2,)
     pos = pos.reshape(-1)  # (M,)
@@ -58,6 +84,11 @@ def make_sincos_pos_embed(embed_dim: int, pos: torch.Tensor, omega_0: float = 10
     emb_sin = torch.sin(out)  # (M, D/2)
     emb_cos = torch.cos(out)  # (M, D/2)
     emb = torch.cat([emb_sin, emb_cos], dim=1)  # (M, D)
+    
+    # Convert back to input dtype if baseline mode used different dtype
+    if not _USE_COS_SIN_DTYPE_OPTIMIZATION and emb.dtype != input_dtype:
+        emb = emb.to(input_dtype)
+    
     return emb
 
 

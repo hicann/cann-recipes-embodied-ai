@@ -163,7 +163,7 @@ class Attention(nn.Module):
             x = x.reshape(batch_size, num_tokens, channel)
             
         elif self.is_global_attention:
-            # Global Attention without SP
+            # Global Attention: always use NPU FIA (fp32 handled via dtype conversion inside)
             fia_params = FIAComputeParams(
                 q=q, k=k, v=v,
                 causal=False,
@@ -174,13 +174,22 @@ class Attention(nn.Module):
             x = x.transpose(1, 2).contiguous().reshape(batch_size, num_tokens, channel)
             
         else:
-            # Frame Attention
+            # Frame Attention (uses SDPA, short sequences don't need FIA)
+            out_dtype = q.dtype
+            # SDPA dispatches to npu_flash_attention_score which also lacks fp32 support;
+            # convert to bf16 for computation, restore original dtype afterwards.
+            if out_dtype == torch.float32:
+                q = q.to(torch.bfloat16)
+                k = k.to(torch.bfloat16)
+                v = v.to(torch.bfloat16)
             x = F.scaled_dot_product_attention(
                 q, k, v, 
                 dropout_p=self.attn_drop.p if self.training else 0.0,
                 is_causal=False,
                 scale=self.scale,
             )
+            if out_dtype == torch.float32:
+                x = x.to(out_dtype)
             x = x.transpose(1, 2).contiguous().reshape(batch_size, num_tokens, channel)
         
         # Output projection
@@ -224,7 +233,14 @@ class Attention(nn.Module):
         q, k, v = params.q, params.k, params.v
         batch_size, num_heads, num_tokens, head_dim = q.shape
         out_dtype = q.dtype
-        
+
+        # FIA does not support fp32 natively on NPU; convert to bf16 for computation,
+        # restore original dtype at the end (same pattern as custom_interpolate).
+        if out_dtype == torch.float32:
+            q = q.to(torch.bfloat16)
+            k = k.to(torch.bfloat16)
+            v = v.to(torch.bfloat16)
+
         scale = params.scale if params.scale is not None else 1.0 / math.sqrt(head_dim)
         
         # Check for GQA
@@ -238,12 +254,13 @@ class Attention(nn.Module):
                 f"FIA does not support dropout (dropout_p={params.dropout_p}), "
                 f"falling back to SDPA"
             )
-            return F.scaled_dot_product_attention(
+            out = F.scaled_dot_product_attention(
                 q, k, v,
                 dropout_p=params.dropout_p,
                 is_causal=params.causal,
                 scale=scale,
             )
+            return out.to(out_dtype)
         
         # Call NPU fused attention
         out = torch_npu.npu_fused_infer_attention_score(

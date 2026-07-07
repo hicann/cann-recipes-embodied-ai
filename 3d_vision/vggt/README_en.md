@@ -1,134 +1,187 @@
-# VGGT inference on Ascend Atlas A2
-## CANN Environment Preparaton
-1. The inference of VGGT depends on the CANN development kit package (`cann-toolkit`) and the CANN binaray operator package(`cann-kernels`). The supported CANN software version is CANN 8.5.0.
-   
-    Download the `Ascend-cann-toolkit_${version}_linux-${arch}.run` and `Ascend-cann-${chip_type}-ops_linux-${arch}.run` packages from the [CANN Software Package Download Page](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.5.0) and install them by referring to the [CANN Installation Guide](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/quickstart/instg_quick.html).
+# VGGT Model Inference Adaptation on Ascend Atlas A2/A3
 
-2. The required versions of torch and torch_npu are 2.7.1 and 2.7.1.post2.
+This sample completes the inference adaptation of the VGGT model on NPU based on the [VGGT open-source model](https://github.com/facebookresearch/vggt), and provides accuracy evaluation scripts for three tasks: camera pose estimation, point cloud reconstruction, and depth estimation. For detailed information, please refer to the [Accuracy Evaluation Chapter](https://gitcode.com/cann/cann-recipes-embodied-ai/blob/master/docs/3d_vision/vggt/vggt_accurancy_evaluation.md).
 
-    Download the binary package from [Ascend Extension for PyTorch](https://www.hiascend.com/document/detail/zh/Pytorch/730/configandinstg/instg/docs/zh/installation_guide/installation_via_binary_package.md) and install torch and torch_npu.
-    ```shell
-    conda create -n vggt python==3.11.13
-    conda activate vggt
-    pip3 install torch==2.7.1
-    pip3 install torch-npu==2.7.1.post2
-    ```
+Additionally, this sample has optimized the VGGT model performance on NPU. Currently, with 25 images as input, the inference time has been reduced to 1.12 seconds. For detailed information, please refer to the [Performance Optimization Chapter](https://gitcode.com/cann/cann-recipes-embodied-ai/blob/master/docs/3d_vision/vggt/vggt_optimization.md).
 
-## VGGT Model Preparation
-1. Download the open-source [VGGT network code](https://github.com/facebookresearch/vggt/tree/main) from the github repo.
-   ```shell
-    git clone https://github.com/facebookresearch/vggt.git
-   ```
-2. Download the code of this repository:
-   ```shell
-   git clone https://gitcode.com/cann/cann-recipes-embodied-ai.git
-   ```
-3. Copy the code from the VGGT repository to this project directory in non-overwrite mode:
-    ```shell
-    cp -r vggt/examples cann-recipes-embodied-ai/3d_vision/vggt/
-    cp -rn vggt/vggt/dependency cann-recipes-embodied-ai/3d_vision/vggt/vggt/dependency
-    cp -rn vggt/vggt/heads cann-recipes-embodied-ai/3d_vision/vggt/vggt/
-    cp -rn vggt/vggt/layers cann-recipes-embodied-ai/3d_vision/vggt/vggt/
-    cp -rn vggt/vggt/utils cann-recipes-embodied-ai/3d_vision/vggt/vggt/ 
-    ```
-4. Install Python dependencies:
-    ```shell
-    pip3 install -r requirements.txt
-    ```
-5. Download [VGGT model weights](https://huggingface.co/spaces/facebook/vggt) and copy it to the local path `ckpt`.
-    ```
-    VGGT
-        +--- examples
-        +--- demo_infer.py
-        +--- eval
-        +--- ckpt
-            +--- model.pt
-        +--- quant
-        +--- vggt
-            +--- dependency
-            +--- heads
-            +--- layers
-            +--- models
-            +--- utils
-            +--- sp
-    ```
-## Performance Measurement
-This repo provides script to test the functionality and the performance of VGGT model on NPU.
-1. Before executing the test scripts, refer to the Ascend Community CANN installation tutorial to set environment variables:
-    ```shell 
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh 
-    ```
-2. Run the inference script and the output presents the average inference time of vggt bf16 model.
-   ```shell
-    python demo_infer.py --ckpt "ckpt/model.pt"
-   ```
-  
-3. Run the inference script and the output presents the average inference time of vggt bf16_sp model.
-   ```shell
-    bash infer_test.sh
-   ```
-   Parameter description for multi NPU inference:
-   ```
-    torchrun --nproc_per_node=1 demo_infer.py \
-      --ckpt ${model_base} \
-      --images_path examples/kitchen/images \
-      --enable_sp \
-      --ulysses_degree 1 \
-      --ring_degree 1
-      
-   # nproc_per_node：The torchrun parameter, the number of processes started by each node, needs to be equal to the number of NPU cards used；
-   # ckpt：Model checkpoint file path；
-   # images_path：Enter the directory where the image sequence is located；
-   # enable_sp：Whether to enable sequence parallelism, default value: False, with the prerequisite that nproc_per_node>1；
-   # ulysses_degree：Ulysses parallelism, constraint Ulysses_degree × ring_degree=nproc_per_node; Num_ attention heads must be divisible by Ulysses_degree；
-   # ring_degree：Ring parallelism, constraint Ulysses_degree × ring_degree=nproc_per_node
+This sample supports single-card inference and multi-card sequence parallel inference on Ascend Atlas A2/A3 environment.
 
-4. To perform vggt int8 model inference, you first need to build the vggt int8 model:
-   ```shell
-    python demo_infer.py --ckpt "ckpt/model.pt" --buildW8A8
-   ```
-   The vggt int8 model will be built in the current path, and then used for inference:
-   ```shell
-    python demo_infer.py --ckpt VGGT_model_W8A8.pt --enableW8A8
-   ```
-## Accurancy Benchmark
-This repo provides accurancy benchmark to evaluate the VGGT model on NPU. The full benchmark include three programs to test the accurancy of VGGT on Pose Evaluation, Point Map Evaluation and Depth Evaluation. 
+> Users using the one-stop platform can directly jump to the [「One-stop Platform Quick Start」](#one-stop-platform-quick-start) chapter.
 
-Since the full dataste of benchmark is large, we can initially test the accurancy of VGGT model in Pose Evaluation with the subset of the full Co3DV2 dataset.
+***
 
-### Dataset Preparation:
-1. Download data `CO3D_apple.zip` and data `CO3D_backpack.zip` from [CO3D website](https://ai.meta.com/datasets/co3d-downloads/) and unzip them to `datasets/co3d/co3d_data/`.
-    ```
-    VGGT
-        +--- datasets
-            +--- co3d
-                +--- co3d_data
-                        +--- apple
-                        +--- backpack
-                    ...
-    ```
-2. Prepare metadata of the dataset:
-    ```shell
-   export VGGT_DIR=$(pwd)
-   cd eval/pose_evaluation/dataset_prepare
-   python preprocess_co3d.py --category all --co3d_v2_dir $VGGT_DIR/datasets/co3d/co3d_data/ --output_dir $VGGT_DIR/datasets/co3d/co3d_anno/ 
-    ```
-### Accurancy Measurement
-- Execute the benchmark program:
--   * Use vggt bf16 model:
-    ```shell
-    export VGGT_DIR=$(pwd)
-    cd eval/pose_evaluation
-    python eval_co3d.py --co3d_dir $VGGT_DIR/datasets/co3d/co3d_data/
-        --co3d_anno_dir $VGGT_DIR/datasets/co3d/co3d_anno/  --ckpt $VGGT_DIR/ckpt/model.pt
-    ```
-    * Currently, the bf16 model measurement accurancy is about 0.911.
-    
--   * Use vggt int8 model:
-    ```shell
-    export VGGT_DIR=$(pwd)
-    cd eval/pose_evaluation
-    python eval_co3d.py --co3d_dir $VGGT_DIR/datasets/co3d/co3d_data/
-        --co3d_anno_dir $VGGT_DIR/datasets/co3d/co3d_anno/  --ckpt VGGT_model_W8A8.pt --enableW8A8
-    ```
-    * Currently, the int8 model measurement accurancy is about 0.907.
+## Running the Sample
+
+### CANN Environment Preparation
+
+1. This sample depends on the CANN development toolkit package (cann-toolkit) and CANN binary operator package (cann-kernels). Currently, the CANN software version used is `CANN.8.5.0`.
+   Please download `Ascend-cann-toolkit_${version}_linux-${arch}.run` and `Ascend-cann-${chip_type}-ops_linux-${arch}.run` packages from [CANN Software Download](https://www.hiascend.com/developer/download/community/result?module=cann\&cann=8.5.0), and refer to [CANN Installation Documentation](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/quickstart/instg_quick.html) for installation.
+
+2. The torch and torch_npu versions required by this sample are 2.7.1.
+   Please download torch and torch_npu installation packages from [Ascend Extension for PyTorch Plugin](https://www.hiascend.com/document/detail/zh/Pytorch/730/configandinstg/instg/docs/zh/installation_guide/installation_via_binary_package.md). The torch and torch_npu versions required are 2.7.1 and 2.7.1.post2 respectively.
+   ```shell
+   conda create -n vggt python==3.11.13
+   conda activate vggt
+   pip3 install torch==2.7.1
+   pip3 install torch_npu==2.7.1.post2
+   ```
+
+### Network Model Code Preparation
+
+- This repository depends on the open-source repository code from [VGGT](https://github.com/facebookresearch/vggt/tree/main).
+- Navigate to the official VGGT repository and download the VGGT model network code:
+  ```shell
+  git clone https://github.com/facebookresearch/vggt.git
+  ```
+- Download this repository code:
+  ```shell
+  git clone https://gitcode.com/cann/cann-recipes-embodied-ai.git
+  ```
+- VGGT model weights download: [VGGT model checkpoint](https://huggingface.co/spaces/facebook/vggt), and copy the weights file `model.pt` to the ckpt directory:
+  ```shell
+  pip install -U huggingface_hub
+  export HF_ENDPOINT=https://hf-mirror.com
+  hf download facebook/VGGT-1B --local-dir vggt
+  ```
+- Copy the VGGT repository network model files to this project directory in **non-overwrite mode**:
+  ```shell
+  cp vggt/visual_util.py cann-recipes-embodied-ai/3d_vision/vggt/
+  cp -r vggt/examples cann-recipes-embodied-ai/3d_vision/vggt/
+  cp -rn vggt/vggt/dependency cann-recipes-embodied-ai/3d_vision/vggt/vggt/dependency
+  cp -rn vggt/vggt/heads cann-recipes-embodied-ai/3d_vision/vggt/vggt/
+  cp -rn vggt/vggt/layers cann-recipes-embodied-ai/3d_vision/vggt/vggt/
+  cp -rn vggt/vggt/utils cann-recipes-embodied-ai/3d_vision/vggt/vggt/
+  ```
+- Install Python dependencies:
+  ```shell
+  cd cann-recipes-embodied-ai/3d_vision/vggt/
+  pip3 install -r requirements.txt
+  ```
+- The model weights and model structure are listed in the file directory as follows:
+  ```
+  VGGT
+    +--- examples
+    +--- demo_infer.py
+    +--- eval
+    +--- ckpt
+          +--- model.pt
+    +--- config
+    +--- quant
+    +--- vggt
+          +--- dependency
+          +--- heads
+          +--- layers
+          +--- models
+          +--- utils
+          +--- sp
+  ```
+
+### Quick Start
+
+This sample uses YAML configuration files to manage parameters, supporting multi-configuration scenario switching. For detailed parameter descriptions and constraint conditions, please refer to [YAML Configuration File Description](config/README.md).
+
+Before executing the script, please refer to the CANN installation tutorial in [Ascend Community](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/quickstart/instg_quick.html) to configure environment variables:
+
+```shell
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+```
+
+#### **Single-card/Multi-card Inference**
+
+- Method 1: Python direct execution (single-card inference only)
+
+```bash
+# Use single.yaml configuration by default (single-card inference)
+python demo_infer.py
+
+# Specify configuration file (single-card inference)
+python demo_infer.py --config config/single.yaml
+```
+
+- Method 2: Shell script execution (supports single-card and multi-card)
+
+```bash
+# Single-card inference (uses single.yaml by default)
+bash infer_test.sh
+
+# Multi-card inference (2-card parallel, internally calls torchrun)
+bash infer_test.sh sp2.yaml
+
+# Multi-card inference (4-card parallel)
+bash infer_test.sh sp4.yaml
+
+# Multi-card inference (8-card parallel)
+bash infer_test.sh sp8.yaml
+```
+
+#### **int8 Quantized Model Inference**
+
+You need to generate the int8 model first (in the current implementation, only the Linear layers with K=4096 in the VGGT model are quantized to 8bit).
+
+**Step 1: Generate int8 Quantized Model**
+
+Modify the `build` parameter in the YAML configuration file to true to build the quantized model:
+
+```yaml
+optimization:
+  quantization:
+    int8-w8a8:
+      enable: false
+      build: true
+```
+
+Then run (replace the yaml filename with actual configuration file):
+
+```bash
+python demo_infer.py --config config/xxx.yaml
+```
+
+The int8 model will be generated in the current path (filename: `VGGT_model_W8A8.pt`).
+
+**Step 2: Use int8 Quantized Model for Inference**
+
+Use the `config/single_w8a8.yaml` configuration file:
+
+```bash
+python demo_infer.py --config config/single_w8a8.yaml
+```
+
+## One-stop Platform Quick Start
+
+This chapter is for users using the one-stop platform. The platform has pre-configured the complete CANN environment. Follow the steps below to complete VGGT 3D reconstruction inference on a single card.
+
+> Users using the one-stop platform should select instances related to python3.11 on A2/A3 for creation.
+
+### Modify Variables in File
+
+Modify the `WORKSPACE_DIR` variable in `infer_platform_env_prepare.sh` to point to the path, such as `cann_recipes`
+
+### Code and Weights Preparation
+
+Run the following command to execute the script for code and weights preparation:
+
+```bash
+cd cann-recipes-embodied-ai/3d_vision/vggt
+bash infer_platform_env_prepare.sh
+```
+
+### Run Inference Script
+
+Run bf16 model single-card inference:
+
+```bash
+python demo_infer.py --config config/single.yaml
+```
+
+***
+
+## Citation
+
+```bibtex
+@inproceedings{wang2025vggt,
+  title={VGGT: Visual Geometry Grounded Transformer},
+  author={Wang, Jianyuan and Chen, Minghao and Karaev, Nikita and Vedaldi, Andrea and Rupprecht, Christian and Novotny, David},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  year={2025}
+}
+```

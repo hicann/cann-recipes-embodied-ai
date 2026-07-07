@@ -17,6 +17,7 @@ from typing import Callable, List, Any, Tuple, Dict, Optional
 
 import torch
 from torch import nn, Tensor
+import torch.nn.functional as F
 import torch_npu
 import torch.distributed as dist
 
@@ -29,14 +30,20 @@ from .mlp import Mlp
 XFORMERS_AVAILABLE = False
 
 
+# ========== NPU fused implementation (Add + LayerNorm) ==========
 def vggt_layernorm_forward(self, x: torch.Tensor, residual: Optional[torch.Tensor] = None):
+    """NPU fused Add+LayerNorm forward: single fused operator."""
     if residual is None:
         return torch_npu.npu_layer_norm_eval(x, self.normalized_shape, self.weight, self.bias, self.eps)
     else:
-        y, _, _, residual = torch_npu.npu_add_layer_norm(residual, x, self.weight, \
-                self.bias, self.eps, additional_output=True)
+        y, _, _, residual = torch_npu.npu_add_layer_norm(
+            residual, x, self.weight, self.bias, self.eps, additional_output=True
+        )
         return y, residual
 
+
+# ========== Module initialization with NPU fused operator by default ==========
+# Default to NPU fused operator on import
 nn.LayerNorm.forward = vggt_layernorm_forward
 
 

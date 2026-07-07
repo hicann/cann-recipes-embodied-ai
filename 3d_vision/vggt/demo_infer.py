@@ -27,9 +27,24 @@ from vggt.models.vggt import VGGT
 from vggt.sp import SPConfig
 from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.cast_weight import cast_model_weight
+from vggt.heads.utils import set_cos_sin_dtype_optimization_enabled
 from eval.general_utils import fix_random_seed
 from quant.vggt_utils import replace_linear_in_vggt, set_ignore_quantize
 from quant.vggt_linear import LinearW8A8
+from utils import (
+    load_yaml_config,
+    load_optimization_config,
+    get_model_dtype,
+    load_w8a8_model,
+    load_standard_model,
+    build_and_save_w8a8_model,
+    StandardModelConfig,
+    W8A8ModelConfig,
+    ParallelConfigResult,
+    ModelLoadConfig,
+    InferenceConfig,
+    build_vggt_config
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -127,8 +142,10 @@ def setup_sequence_parallel_groups(ulysses_degree, ring_degree):
     
     if world_size != ulysses_degree * ring_degree:
         raise ValueError(
-            f"world_size ({world_size}) must equal ulysses_degree ({ulysses_degree}) "
-            f"* ring_degree ({ring_degree})"
+            f"Runtime world_size ({world_size}) does not match YAML config "
+            f"(ulysses_degree={ulysses_degree}, ring_degree={ring_degree}, "
+            f"expected world_size={ulysses_degree * ring_degree}). "
+            f"Please check torchrun --nproc_per_node matches YAML world_size."
         )
     
     # Create Ulysses groups
@@ -187,28 +204,79 @@ def sync_and_get_time(start_time=None, use_syn=True, log_result=False):
     return timestamp
 
 
-def run_inference_with_sp(args):
-    """Main inference function with sequence parallel support."""
-    fix_random_seed(42)
-    
-    rank, world_size, local_rank = setup_distributed()
-    device = f"npu:{local_rank}"
-    
-    if args.enable_sp:
+def _setup_parallel_config(optimization: dict) -> ParallelConfigResult:
+    """
+    Setup parallel computation configuration.
+
+    Args:
+        optimization: Optimization configuration dictionary
+
+    Returns:
+        ParallelConfigResult object containing all parallel configuration values
+    """
+    parallel = optimization.get('parallel-computation', {})
+    enable_sp = parallel.get('enable', False)
+    ulysses_degree = parallel.get('ulysses-degree', 2)
+    ring_degree = parallel.get('ring-degree', 2)
+
+    if enable_sp:
         sp_config, ulysses_group, ring_group, global_group = setup_sequence_parallel_groups(
-            ulysses_degree=args.ulysses_degree,
-            ring_degree=args.ring_degree
+            ulysses_degree=ulysses_degree,
+            ring_degree=ring_degree
         )
     else:
         sp_config = None
         ulysses_group = None
         ring_group = None
         global_group = None
-    
-    dtype = torch.bfloat16
-    checkpoint_path = args.ckpt
-    
-    # Load model with SP support
+
+    return ParallelConfigResult(
+        enable_sp=enable_sp,
+        ulysses_degree=ulysses_degree,
+        ring_degree=ring_degree,
+        sp_config=sp_config,
+        ulysses_group=ulysses_group,
+        ring_group=ring_group,
+        global_group=global_group
+    )
+
+
+def _setup_redundancy_elimination(optimization: dict, rank: int):
+    """
+    Setup computation redundancy elimination configuration.
+
+    Args:
+        optimization: Optimization configuration dictionary
+        rank: Current process rank
+
+    Returns:
+        Tuple of (use_rope_cache, use_dpt_pos_embed_cache, use_cos_sin_dtype_opt)
+    """
+    redundancy_elim = optimization.get('computation-redundancy-elimination', {})
+    use_rope_cache = redundancy_elim.get('rope-cache', True)
+    use_dpt_pos_embed_cache = redundancy_elim.get('dpt-pos-embed-cache', True)
+    use_cos_sin_dtype_opt = redundancy_elim.get('cos-sin-dtype-optimization', True)
+
+    set_cos_sin_dtype_optimization_enabled(use_cos_sin_dtype_opt)
+
+    if rank == 0:
+        logging.info(f"[OPTIMIZATION] rope-cache: {use_rope_cache}")
+        logging.info(f"[OPTIMIZATION] dpt-pos-embed-cache: {use_dpt_pos_embed_cache}")
+        logging.info(f"[OPTIMIZATION] cos-sin-dtype-optimization: {use_cos_sin_dtype_opt}")
+
+    return use_rope_cache, use_dpt_pos_embed_cache, use_cos_sin_dtype_opt
+
+
+def _load_model_with_sp(config: ModelLoadConfig):
+    """
+    Load VGGT model with sequence parallel support.
+
+    Args:
+        config: ModelLoadConfig object containing all model loading parameters
+
+    Returns:
+        Loaded VGGT model
+    """
     model = VGGT(
         img_size=518,
         patch_size=14,
@@ -217,180 +285,356 @@ def run_inference_with_sp(args):
         enable_point=True,
         enable_depth=True,
         enable_track=True,
-        sp_config=sp_config,
-        sp_ulysses_group=ulysses_group,
-        sp_ring_group=ring_group,
-        sp_global_group=global_group,
+        sp_config=config.sp_config,
+        sp_ulysses_group=config.ulysses_group,
+        sp_ring_group=config.ring_group,
+        sp_global_group=config.global_group,
+        use_rope_cache=config.use_rope_cache,
+        use_dpt_pos_embed_cache=config.use_dpt_pos_embed_cache,
     )
-    
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+
+    checkpoint = torch.load(config.checkpoint_path, map_location='cpu')
     model.load_state_dict(checkpoint)
-    model = model.to(dtype)
-    model.to(device)
+
+    if config.dtype == torch.float32:
+        model = model.float()
+    else:
+        model = model.bfloat16()
+
+    model.to(config.device)
     model.eval()
-    model = cast_model_weight(model)
-    
-    logging.info(f"Model loaded successfully on rank {rank}")
-    
-    # Load images
-    image_paths = args.images_path
-    image_names = get_all_files_paths(image_paths)
-    image_names = sorted(image_names)
-    
-    images = load_and_preprocess_images(image_names).to(device)
-    
+
+    memory_format = config.optimization.get('memory-and-data-format', {})
+    if memory_format.get('conv-weight-layout-preconvert', True):
+        model = cast_model_weight(model)
+        if config.rank == 0:
+            logging.info("[OPTIMIZATION] conv-weight-layout-preconvert: enabled")
+
+    logging.info(f"Model loaded successfully on rank {config.rank}")
+    return model
+
+
+def _run_sp_inference_loop(config: InferenceConfig):
+    """
+    Run inference loop with sequence parallel.
+
+    Args:
+        config: InferenceConfig object containing all inference parameters
+
+    Returns:
+        List of execution times
+    """
+    exec_time_list = []
+
+    # Combine context managers to reduce nesting depth
+    inference_context = torch.cuda.amp.autocast(enabled=config.use_autocast, dtype=config.dtype)
+
+    with config.profiler:
+        with torch.no_grad(), inference_context:
+            for step in range(config.num_runs):
+                dist.barrier()
+                start_time = sync_and_get_time()
+                predictions = config.model(config.images)
+                dist.barrier()
+                exec_time = sync_and_get_time(start_time, log_result=(config.rank == 0 and step >= 2))
+                exec_time_list.append(exec_time)
+                config.profiler.step()
+
+    return exec_time_list
+
+
+def _load_images_for_inference(images_path, device, dtype):
+    """
+    Load and preprocess images for inference.
+
+    Args:
+        images_path: Path to images directory
+        device: Target device
+        dtype: Target data type
+
+    Returns:
+        Tuple of (images tensor, number of images)
+    """
+    image_names = sorted(get_all_files_paths(images_path))
+    images = load_and_preprocess_images(image_names).to(device=device, dtype=dtype)
     if len(images.shape) == 4:
         images = images.unsqueeze(0)
-    
     logging.info(f"Loaded {len(image_names)} images, shape: {images.shape}")
-    
-    # Warmup
+    return images, len(image_names)
+
+
+def _warmup_model(model, images, use_autocast, dtype):
+    """
+    Perform model warmup before inference.
+
+    Args:
+        model: VGGT model
+        images: Input images tensor
+        use_autocast: Whether to use autocast
+        dtype: Model data type
+    """
     with torch.no_grad():
-        with torch.cuda.amp.autocast(dtype=dtype):
+        with torch.cuda.amp.autocast(enabled=use_autocast, dtype=dtype):
             _ = model(images)
-    
     dist.barrier()
     logging.info("Warmup completed")
-    
-    # Setup profiler
-    profile_dir = os.path.join(args.profile_dir, f"rank_{rank}") if args.enable_profiling else "prof"
+
+
+def _setup_profiler_for_sp(enable_profiling, profile_dir, rank):
+    """
+    Setup profiler for sequence parallel inference.
+
+    Args:
+        enable_profiling: Whether to enable profiling
+        profile_dir: Base directory for profiling results
+        rank: Current process rank
+
+    Returns:
+        Profiler context manager
+    """
+    profile_save_path = os.path.join(profile_dir, f"rank_{rank}") if enable_profiling else "prof"
     profiler = define_profiler(
-        enable_profiler=args.enable_profiling,
-        profile_save_path=profile_dir,
+        enable_profiler=enable_profiling,
+        profile_save_path=profile_save_path,
         rank=rank
     )
-    
-    num_runs = args.num_runs
-    exec_time_list = []
-    
-    # Run inference
-    with profiler:
-        with torch.no_grad():
-            with torch.cuda.amp.autocast(dtype=dtype):
-                for step in range(num_runs):
-                    dist.barrier()
-                    start_time = sync_and_get_time()
-                    predictions = model(images)
-                    dist.barrier()
-                    exec_time = sync_and_get_time(start_time, log_result=(rank == 0 and step >= 2))
-                    exec_time_list.append(exec_time)
-                    profiler.step()
-    
-    dist.barrier()
-    
+    return profiler
+
+
+def _log_inference_results(exec_time_list, rank):
+    """
+    Log inference timing results.
+
+    Args:
+        exec_time_list: List of execution times
+        rank: Current process rank
+    """
     if rank == 0:
-        # Skip first 2 warmup runs
         valid_times = exec_time_list[2:]
         avg_time = sum(valid_times) / len(valid_times) if valid_times else 0
         logging.info(f"Execution times (ms): {[t*1000 for t in exec_time_list]}")
         logging.info(f"Average inference time (excluding warmup): {avg_time*1000:.2f} ms")
-    
+
+
+def run_inference_with_sp(args):
+    """Main inference function with sequence parallel support."""
+    fix_random_seed(42)
+
+    rank, world_size, local_rank = setup_distributed()
+    device = f"npu:{local_rank}"
+
+    parallel_result = _setup_parallel_config(args.optimization)
+    dtype = get_model_dtype(args.optimization)
+    use_rope_cache, use_dpt_pos_embed_cache, _ = _setup_redundancy_elimination(args.optimization, rank)
+
+    model_load_config = ModelLoadConfig(
+        checkpoint_path=args.ckpt,
+        sp_config=parallel_result.sp_config,
+        ulysses_group=parallel_result.ulysses_group,
+        ring_group=parallel_result.ring_group,
+        global_group=parallel_result.global_group,
+        device=device,
+        dtype=dtype,
+        use_rope_cache=use_rope_cache,
+        use_dpt_pos_embed_cache=use_dpt_pos_embed_cache,
+        optimization=args.optimization,
+        rank=rank
+    )
+    model = _load_model_with_sp(model_load_config)
+
+    images, _ = _load_images_for_inference(args.images_path, device, dtype)
+
+    use_autocast = (dtype == torch.bfloat16)
+    _warmup_model(model, images, use_autocast, dtype)
+
+    profiler = _setup_profiler_for_sp(args.enable_profiling, args.profile_dir, rank)
+
+    inference_config = InferenceConfig(
+        model=model,
+        images=images,
+        profiler=profiler,
+        num_runs=args.num_runs,
+        rank=rank,
+        use_autocast=use_autocast,
+        dtype=dtype
+    )
+    exec_time_list = _run_sp_inference_loop(inference_config)
+
+    dist.barrier()
+    _log_inference_results(exec_time_list, rank)
     dist.destroy_process_group()
 
 
-def quick_start(args):
-    """Single GPU inference with optional quantization."""
-    fix_random_seed(42)
-    
-    # Device check
-    device = "npu:0" if torch.cuda.is_available() else "cpu"
-    if not torch.cuda.is_available():
-        raise ValueError("NPU is not available. Check your environment.")
-    
-    logging.info(f"Using device: {device}")
-    
-    dtype = torch.bfloat16
-    checkpoint_path = args.ckpt
-    
-    # Load model with quantization support
-    if args.enableW8A8:
-        logging.info("Loading W8A8 quantized model...")
-        model = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-        model.to(device).eval()
-        logging.info("W8A8 quantized model loaded successfully")
-    else:
-        logging.info("Loading standard model...")
-        model = VGGT()
-        checkpoint = torch.load(checkpoint_path)
-        model.load_state_dict(checkpoint)
-        model = model.to(dtype)
-        model.to(device).eval()
-        model = cast_model_weight(model)
-        logging.info("Standard model loaded successfully")
-        
-        # Build W8A8 quantized model if requested
-        if args.buildW8A8:
-            logging.info("Building W8A8 quantized model...")
-            set_ignore_quantize(model, ignore_quantize=True)
-            replace_linear_in_vggt(model, device=device)
-            save_path = os.path.join(os.getcwd(), "VGGT_model_W8A8.pt")
-            torch.save(model, save_path)
-            logging.info(f"W8A8 model saved to {save_path}")
-            return
-    
-    # Load images
-    image_paths = args.images_path
-    image_names = get_all_files_paths(image_paths)
-    image_names = sorted(image_names)
-    
-    logging.info(f"Loading {len(image_names)} images from {image_paths}")
-    
-    images = load_and_preprocess_images(image_names).to(device)
-    
-    # Run inference
+def _get_quantization_config(optimization: dict):
+    """
+    Get quantization configuration.
+
+    Args:
+        optimization: Optimization configuration dictionary
+
+    Returns:
+        Tuple of (enable_w8a8, build_w8a8)
+    """
+    quantization = optimization.get('quantization', {})
+    int8_config = quantization.get('int8-w8a8', {})
+    enable_w8a8 = int8_config.get('enable', False)
+    build_w8a8 = int8_config.get('build', False)
+    logging.info(f"[OPTIMIZATION] quantization.int8-w8a8.enable: {enable_w8a8}")
+    logging.info(f"[OPTIMIZATION] quantization.int8-w8a8.build: {build_w8a8}")
+    return enable_w8a8, build_w8a8
+
+
+def _setup_redundancy_elimination_single(optimization: dict):
+    """
+    Setup computation redundancy elimination configuration for single card.
+
+    Args:
+        optimization: Optimization configuration dictionary
+
+    Returns:
+        Tuple of (use_rope_cache, use_dpt_pos_embed_cache)
+    """
+    redundancy_elim = optimization.get('computation-redundancy-elimination', {})
+    use_rope_cache = redundancy_elim.get('rope-cache', True)
+    use_dpt_pos_embed_cache = redundancy_elim.get('dpt-pos-embed-cache', True)
+    use_cos_sin_dtype_opt = redundancy_elim.get('cos-sin-dtype-optimization', True)
+
+    set_cos_sin_dtype_optimization_enabled(use_cos_sin_dtype_opt)
+    logging.info(f"[OPTIMIZATION] rope-cache: {use_rope_cache}")
+    logging.info(f"[OPTIMIZATION] dpt-pos-embed-cache: {use_dpt_pos_embed_cache}")
+    logging.info(f"[OPTIMIZATION] cos-sin-dtype-optimization: {use_cos_sin_dtype_opt}")
+
+    return use_rope_cache, use_dpt_pos_embed_cache
+
+
+def _run_single_inference(model, images, num_runs, use_autocast, dtype):
+    """
+    Run single card inference loop.
+
+    Args:
+        model: VGGT model
+        images: Input images tensor
+        num_runs: Number of inference runs
+        use_autocast: Whether to use autocast
+        dtype: Model data type
+
+    Returns:
+        List of execution times
+    """
+    exec_time_list = []
+
     with torch.no_grad():
-        with torch.cuda.amp.autocast(dtype=dtype):
+        with torch.cuda.amp.autocast(enabled=use_autocast, dtype=dtype):
             # Warmup
             predictions = model(images)
-            
-            exec_time_list = []
-            for step in range(6):
+
+            for _ in range(num_runs):
                 start_time = sync_and_get_time()
                 predictions = model(images)
                 exec_time = sync_and_get_time(start_time, log_result=True)
                 exec_time_list.append(exec_time)
-            
-            avg_time = sum(exec_time_list) / len(exec_time_list)
-            logging.info(f"Execution times (ms): {[t*1000 for t in exec_time_list]}")
-            logging.info(f"Average inference time: {avg_time*1000:.2f} ms ({avg_time:.4f} s)")
+
+    return exec_time_list
+
+
+def quick_start(args):
+    """Single card inference with optional quantization."""
+    fix_random_seed(42)
+
+    # Device check
+    device = "npu:0" if torch.cuda.is_available() else "cpu"
+    if not torch.cuda.is_available():
+        raise ValueError("NPU is not available. Check your environment.")
+    logging.info(f"Using device: {device}")
+
+    # Setup configurations
+    enable_w8a8, build_w8a8 = _get_quantization_config(args.optimization)
+    dtype = get_model_dtype(args.optimization)
+    use_rope_cache, use_dpt_pos_embed_cache = _setup_redundancy_elimination_single(args.optimization)
+
+    # Load model
+    if enable_w8a8:
+        w8a8_config = W8A8ModelConfig(
+            checkpoint_path=args.ckpt,
+            device=device,
+            use_rope_cache=use_rope_cache,
+            use_dpt_pos_embed_cache=use_dpt_pos_embed_cache
+        )
+        model = load_w8a8_model(w8a8_config)
+    else:
+        model_config = StandardModelConfig(
+            checkpoint_path=args.ckpt,
+            device=device,
+            dtype=dtype,
+            use_rope_cache=use_rope_cache,
+            use_dpt_pos_embed_cache=use_dpt_pos_embed_cache,
+            optimization=args.optimization
+        )
+        model = load_standard_model(model_config)
+        if build_w8a8:
+            build_and_save_w8a8_model(model, device)
+            return
+
+    # Load images
+    image_names = sorted(get_all_files_paths(args.images_path))
+    logging.info(f"Loading {len(image_names)} images from {args.images_path}")
+    images = load_and_preprocess_images(image_names).to(device=device, dtype=dtype)
+
+    # Run inference
+    use_autocast = (dtype == torch.bfloat16)
+    exec_time_list = _run_single_inference(model, images, args.num_runs, use_autocast, dtype)
+
+    avg_time = sum(exec_time_list) / len(exec_time_list)
+    logging.info(f"Execution times (ms): {[t*1000 for t in exec_time_list]}")
+    logging.info(f"Average inference time: {avg_time*1000:.2f} ms ({avg_time:.4f} s)")
 
 
 def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser("VGGT Inference", add_help=True)
+    """Parse YAML configuration file path with default."""
+    parser = argparse.ArgumentParser(
+        "VGGT Inference (YAML Config Mode)",
+        description="VGGT inference using YAML configuration file",
+        add_help=True
+    )
     
-    # Basic arguments
-    parser.add_argument("--ckpt", required=True, help="Checkpoint path")
-    parser.add_argument("--images_path", default="examples/kitchen/images", help="Dataset location")
+    parser.add_argument(
+        "--config",
+        default="config/single.yaml",
+        help="YAML configuration file path (default: config/single.yaml)"
+    )
     
-    # Quantization arguments
-    parser.add_argument("--buildW8A8", action="store_true", help="Build W8A8 quantized model")
-    parser.add_argument("--enableW8A8", action="store_true", help="Use W8A8 quantized model")
+    args = parser.parse_args()
     
-    # Sequence Parallel arguments
-    parser.add_argument("--enable_sp", action="store_true", help="Enable sequence parallel")
-    parser.add_argument("--ulysses_degree", type=int, default=2, help="Ulysses parallelism degree")
-    parser.add_argument("--ring_degree", type=int, default=2, help="Ring attention degree")
+    logging.info(f"[INFO] Using config file: {args.config}")
     
-    # Profiling arguments
-    parser.add_argument("--enable_profiling", action="store_true", help="Enable NPU profiling")
-    parser.add_argument("--profile_dir", default="prof_sp", help="Profiling results directory")
+    # Load full YAML config (single read)
+    config = load_yaml_config(args.config)
     
-    # Performance arguments
-    parser.add_argument("--num_runs", type=int, default=6, help="Number of inference runs")
+    # Extract model_args from config
+    model_args = config.get('model_args', {})
     
-    return parser.parse_args()
+    # Extract world_size from config
+    world_size = config.get('world_size', 1)
+    
+    # Load optimization config from the same config dictionary
+    optimization = load_optimization_config(config, world_size)
+    
+    # Build VGGTConfig from model_args and optimization
+    return build_vggt_config(model_args, optimization)
 
 
 def main():
     args = parse_args()
     
     # Check if running in distributed mode
-    if args.enable_sp or ('RANK' in os.environ and 'WORLD_SIZE' in os.environ):
+    parallel = args.optimization.get('parallel-computation', {})
+    enable_sp = parallel.get('enable', False)
+    
+    if enable_sp or ('RANK' in os.environ and 'WORLD_SIZE' in os.environ):
         logging.info("Running in distributed mode with sequence parallel")
         run_inference_with_sp(args)
     else:
-        logging.info("Running in single GPU mode")
+        logging.info("Running in single card mode")
         quick_start(args)
 
 

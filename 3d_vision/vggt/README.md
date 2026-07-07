@@ -29,14 +29,14 @@
   ```shell
   git clone https://gitcode.com/cann/cann-recipes-embodied-ai.git
   ```
-- VGGT 模型权重下载：[VGGT model checkpoint](https://huggingface.co/spaces/facebook/vggt)，并将权重文件`model.pt`复制到ckpt目录下。：
+- VGGT 模型权重下载：[VGGT model checkpoint](https://huggingface.co/spaces/facebook/vggt)，并将权重文件`model.pt`复制到ckpt目录下：
   ```shell
   pip install -U huggingface_hub
   export HF_ENDPOINT=https://hf-mirror.com
   hf download facebook/VGGT-1B --local-dir vggt
   ```
-- 将VGGT仓库的网络模型文件以**非覆盖模式**复制到本项目目录下。
-   ```shell
+- 将VGGT仓库的网络模型文件以**非覆盖模式**复制到本项目目录下：
+  ```shell
   cp vggt/visual_util.py cann-recipes-embodied-ai/3d_vision/vggt/
   cp -r vggt/examples cann-recipes-embodied-ai/3d_vision/vggt/
   cp -rn vggt/vggt/dependency cann-recipes-embodied-ai/3d_vision/vggt/vggt/dependency
@@ -57,6 +57,7 @@
     +--- eval
     +--- ckpt
           +--- model.pt
+    +--- config
     +--- quant
     +--- vggt
           +--- dependency
@@ -68,64 +69,106 @@
   ```
 
 ### 快速启动
-本样例准备了单卡和多卡环境下的推理样例脚本。
+
+本样例使用 YAML 配置文件管理参数，支持多配置场景切换，详细的参数说明和约束条件请参考 [YAML配置文件说明](config/README.md)。
+
 执行脚本前，请参考[Ascend社区](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850/quickstart/instg_quick.html)中的CANN安装软件教程，配置环境变量：
+
 ```shell
 source /usr/local/Ascend/ascend-toolkit/set_env.sh 
 ```
-推理bf16模型脚本单卡运行：
-```python
-python demo_infer.py --ckpt "ckpt/model.pt"
-```
-推理bf16模型脚本多卡运行：
-```python
-bash infer_test.sh
-```
-多卡推理的参数说明：
-```python
-torchrun --nproc_per_node=1 demo_infer.py \
-    --ckpt ${model_base} \
-    --images_path examples/kitchen/images \
-    --enable_sp \
-    --ulysses_degree 1 \
-    --ring_degree 1
-```
-- `--nproc_per_node：torchrun参数，每个节点启动的进程数，需要等于使用的NPU卡数`
-- `--ckpt：模型checkpoint文件路径`
-- `--images_path：输入图像序列所在目录`
-- `--enable_sp:是否启用序列并行,默认值: False,前提条件为nproc_per_node > 1`
-- `--ulysses_degree：Ulysses并行度,约束ulysses_degree × ring_degree = nproc_per_node；num_attention_heads 必须能被 ulysses_degree 整除`
-- `--ring_degree：Ring并行度,约束ulysses_degree × ring_degree = nproc_per_node`
 
-推理int8模型，需要先生成int8模型(当前实现中，只将VGGT模型中K=4096的Linear层进行了8bit量化)：
-```python
-python demo_infer.py --ckpt "ckpt/model.pt" --buildW8A8
+#### **单卡/多卡推理**
+
+- 启动方式一：Python 直接启动（仅单卡推理）
+
+```bash
+# 默认使用 single.yaml 配置（单卡推理）
+python demo_infer.py
+
+# 指定配置文件（单卡推理）
+python demo_infer.py --config config/single.yaml
 ```
-in8模型会生成在当前路径，再使用该int8模型进行推理：
-```python
-python demo_infer.py --ckpt VGGT_model_W8A8.pt --enableW8A8
+
+- 启动方式二：Shell 脚本启动（支持单卡和多卡）
+
+```bash
+# 单卡推理（默认使用 single.yaml）
+bash infer_test.sh
+
+# 多卡推理（2卡并行，内部调用torchrun）
+bash infer_test.sh sp2.yaml
+
+# 多卡推理（4卡并行）
+bash infer_test.sh sp4.yaml
+
+# 多卡推理（8卡并行）
+bash infer_test.sh sp8.yaml
+```
+
+#### **int8量化模型推理**
+
+需要先生成 int8 模型（当前实现中，只将 VGGT 模型中 K=4096 的 Linear 层进行了 8bit 量化）：
+
+**步骤1：生成 int8 量化模型**
+
+修改build配置为true以构建量化模型：
+
+```yaml
+optimization:
+  quantization:
+    int8-w8a8:
+      enable: false
+      build: true
+```
+
+然后运行（yaml文件名需替换为实际配置文件）：
+
+```bash
+python demo_infer.py --config config/xxx.yaml
+```
+
+int8 模型会生成在当前路径（文件名：`VGGT_model_W8A8.pt`）。
+
+**步骤2：使用 int8 量化模型推理**
+
+使用 `config/single_w8a8.yaml` 配置文件：
+
+```bash
+python demo_infer.py --config config/single_w8a8.yaml
 ```
 
 ## 一站式平台的快速启动
+
 本章节面向使用一站式平台的用户，平台已预置完整的 CANN 环境，按以下步骤即可在单卡上完成 VGGT 的三维重建推理。
+
 > 使用一站式平台的用户请选择A2/A3上的python3.11相关的实例进行创建。
 
 ### 修改文件中变量
-修改infer_platform_env_prepare.sh中WORKSPACE_DIR变量指代的路径，如`cann_recipes`
+
+修改 infer\_platform\_env\_prepare.sh 中 WORKSPACE\_DIR 变量指代的路径，如 `cann_recipes`
 
 ### 代码与权重准备
+
 运行下列命令，一键拉起脚本，进行代码与权重的准备：
+
 ```bash
 cd cann-recipes-embodied-ai/3d_vision/vggt
 bash infer_platform_env_prepare.sh
 ```
+
 ### 推理脚本运行
-推理bf16模型脚本单卡运行：
-```python
-python demo_infer.py --ckpt "ckpt/model.pt"
+
+推理 bf16 模型单卡运行：
+
+```bash
+python demo_infer.py --config config/single.yaml
 ```
----
+
+***
+
 ## Citation
+
 ```bibtex
 @inproceedings{wang2025vggt,
   title={VGGT: Visual Geometry Grounded Transformer},

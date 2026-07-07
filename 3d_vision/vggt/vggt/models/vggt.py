@@ -27,6 +27,7 @@ class VGGT(nn.Module, PyTorchModelHubMixin):
     Improvements:
     1. Single-device mode (sp_config=None): Fully compatible with original implementation
     2. SP mode: Aggregator outputs sharded state, Head layers handle gathering if needed
+    3. NPU fused operators are enabled by default (RoPE npu_rotary_mul, Add+LayerNorm, FIA)
     """
     
     def __init__(
@@ -43,6 +44,9 @@ class VGGT(nn.Module, PyTorchModelHubMixin):
         sp_ulysses_group: Optional[dist.ProcessGroup] = None,
         sp_ring_group: Optional[dist.ProcessGroup] = None,
         sp_global_group: Optional[dist.ProcessGroup] = None,
+        # Computation redundancy elimination switches
+        use_rope_cache: bool = True,
+        use_dpt_pos_embed_cache: bool = True,
     ):
         super().__init__()
 
@@ -54,6 +58,7 @@ class VGGT(nn.Module, PyTorchModelHubMixin):
             sp_ulysses_group=sp_ulysses_group,
             sp_ring_group=sp_ring_group,
             sp_global_group=sp_global_group,
+            use_rope_cache=use_rope_cache,
         )
         
         # Store SP configuration
@@ -76,6 +81,7 @@ class VGGT(nn.Module, PyTorchModelHubMixin):
             activation="inv_log", 
             conf_activation="expp1", 
             pos_embed_cache=self.dpt_pos_embed_cache,
+            use_dpt_pos_embed_cache=use_dpt_pos_embed_cache,
             sp_config=sp_config,
             sp_global_group=sp_global_group
         ) if enable_point else None
@@ -86,6 +92,7 @@ class VGGT(nn.Module, PyTorchModelHubMixin):
             activation="exp", 
             conf_activation="expp1", 
             pos_embed_cache=self.dpt_pos_embed_cache,
+            use_dpt_pos_embed_cache=use_dpt_pos_embed_cache,
             sp_config=sp_config,
             sp_global_group=sp_global_group
         ) if enable_depth else None

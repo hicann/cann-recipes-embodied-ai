@@ -29,21 +29,84 @@ from vggt.models.vggt import VGGT
 from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.geometry import unproject_depth_map_to_point_map
-from vggt.utils.cast_weight import cast_model_weight
+from vggt.heads.utils import set_cos_sin_dtype_optimization_enabled
+from quant.vggt_utils import replace_linear_in_vggt, set_ignore_quantize
+from utils import (
+    load_yaml_config,
+    load_optimization_config,
+    get_model_dtype,
+    load_w8a8_model,
+    load_standard_model,
+    build_and_save_w8a8_model,
+    StandardModelConfig,
+    W8A8ModelConfig,
+)
+
+logging.basicConfig(level=logging.INFO)
 
 parser = argparse.ArgumentParser("VGGT quick start.", add_help=False)
-parser.add_argument("--ckpt", help="checkpoint location")
+parser.add_argument("--config", default="config/single.yaml", help="YAML configuration file path")
 args = parser.parse_args()
+
+logging.info(f"[INFO] Using config file: {args.config}")
+
+# Load YAML config
+config = load_yaml_config(args.config)
+model_args = config.get('model_args', {})
+world_size = config.get('world_size', 1)
+optimization = load_optimization_config(config, world_size)
+
 device = "npu:0" if torch.cuda.is_available() else "cpu"
-logging.basicConfig(level=logging.INFO)
-logging.info("Initializing and loading VGGT model...")
-model = VGGT()
-checkpoint_path = args.ckpt  # Path to the model checkpoint
-checkpoint = torch.load(checkpoint_path)
-model.load_state_dict(checkpoint)
-model.to(device).eval()
-model = model.to(torch.bfloat16)
-model = cast_model_weight(model)
+if not torch.cuda.is_available():
+    raise ValueError("NPU is not available. Check your environment.")
+
+logging.info(f"Using device: {device}")
+
+# Get dtype from config
+dtype = get_model_dtype(optimization)
+
+# Get computation redundancy elimination config
+redundancy_elim = optimization.get('computation-redundancy-elimination', {})
+use_rope_cache = redundancy_elim.get('rope-cache', True)
+use_dpt_pos_embed_cache = redundancy_elim.get('dpt-pos-embed-cache', True)
+use_cos_sin_dtype_opt = redundancy_elim.get('cos-sin-dtype-optimization', True)
+
+# Set cos-sin-dtype global switch
+set_cos_sin_dtype_optimization_enabled(use_cos_sin_dtype_opt)
+logging.info(f"[OPTIMIZATION] rope-cache: {use_rope_cache}")
+logging.info(f"[OPTIMIZATION] dpt-pos-embed-cache: {use_dpt_pos_embed_cache}")
+logging.info(f"[OPTIMIZATION] cos-sin-dtype-optimization: {use_cos_sin_dtype_opt}")
+
+# Get quantization config
+quantization = optimization.get('quantization', {})
+int8_config = quantization.get('int8-w8a8', {})
+enable_w8a8 = int8_config.get('enable', False)
+build_w8a8 = int8_config.get('build', False)
+
+checkpoint_path = model_args['ckpt']
+
+# Load model with quantization support
+if enable_w8a8:
+    w8a8_config = W8A8ModelConfig(
+        checkpoint_path=checkpoint_path,
+        device=device,
+        use_rope_cache=use_rope_cache,
+        use_dpt_pos_embed_cache=use_dpt_pos_embed_cache
+    )
+    model = load_w8a8_model(w8a8_config)
+else:
+    model_config = StandardModelConfig(
+        checkpoint_path=checkpoint_path,
+        device=device,
+        dtype=dtype,
+        use_rope_cache=use_rope_cache,
+        use_dpt_pos_embed_cache=use_dpt_pos_embed_cache,
+        optimization=optimization
+    )
+    model = load_standard_model(model_config)
+    if build_w8a8:
+        build_and_save_w8a8_model(model, device)
+        raise SystemExit(0)
 
 # -------------------------------------------------------------------------
 # 1) Core model inference
@@ -59,13 +122,14 @@ def run_model(target_dir, vggt_model, input_device) -> dict:
     logging.info(f"Found {len(image_names)} images")
     if len(image_names) == 0:
         raise ValueError("No images found. Check your upload.")
-    images = load_and_preprocess_images(image_names).to(input_device)
+    images = load_and_preprocess_images(image_names).to(device=input_device, dtype=dtype)
     logging.info(f"Preprocessed images shape: {images.shape}")
     # Run inference
+    # Note: When dtype is fp32, disable autocast to prevent automatic type conversion
+    use_autocast = (dtype == torch.bfloat16)
     logging.info("Running inference...")
-    dtype = torch.bfloat16 
     with torch.no_grad():
-        with torch.cuda.amp.autocast(dtype=dtype):
+        with torch.cuda.amp.autocast(enabled=use_autocast, dtype=dtype):
             predictions = vggt_model(images)
     # Convert pose encoding to extrinsic and intrinsic matrices
     logging.info("Converting pose encoding to extrinsic and intrinsic matrices...")
@@ -389,9 +453,9 @@ with gr.Blocks(
 
     gr.HTML(
         """
-    <h1>🏛️ VGGT: Visual Geometry Grounded Transformer</h1>
+    <h1> VGGT: Visual Geometry Grounded Transformer</h1>
     <p>
-    <a href="https://github.com/facebookresearch/vggt">🐙 GitHub Repository</a> |
+    <a href="https://github.com/facebookresearch/vggt"> GitHub Repository</a> |
     <a href="#">Project Page</a>
     </p>
 
