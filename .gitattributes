@@ -1,1 +1,2 @@
 SMPLX_NEUTRAL.npz filter=lfs diff=lfs merge=lfs -text
+world_model/cosmos3/assets/videos/*.mp4 filter=lfs diff=lfs merge=lfs -text

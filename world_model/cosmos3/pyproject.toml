@@ -1,0 +1,279 @@
+# Copyright (c) 2026, HUAWEI CORPORATION.  All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Adapted from
+# https://github.com/NVIDIA/cosmos-framework.git
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cosmos-framework"
+version = "1.2.2"
+authors = [
+  {name = "NVIDIA Corporation"},
+]
+description = "Cosmos-Framework: Cosmos3 World Foundation Model (WFM)"
+requires-python = ">=3.10"
+license = {text = "OpenMDW-1.1"}
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: GPU :: NVIDIA CUDA",
+  "Intended Audience :: Science/Research",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "accelerate",
+  "av",
+  "boto3",
+  "cattrs",
+  "diffusers",
+  "einops",
+  "hydra-core",
+  "iopath>=0.1.10",
+  "imageio-ffmpeg",
+  "imageio",
+  "loguru",
+  "msgpack",
+  "obstore",
+  "omegaconf",
+  "pydantic",
+  "qwen-vl-utils",
+  "requests",
+  "scipy",
+  "termcolor",
+  "torch_npu==2.10.0",
+  "torchvision",
+  "transformers>=4.57.1,<5.0.0",
+  "tyro",
+  "uv",
+  "websockets",
+]
+
+[project.optional-dependencies]
+guardrail = [
+  "better-profanity",
+  "nltk",
+  "protobuf",
+  "retinaface-py",
+  "sentencepiece",
+]
+interactive = [
+]
+serve = [
+  "fastapi",
+  "httpx",
+  "gradio",
+  "ray[serve]",
+]
+train = [
+  "aioboto3",
+  "aiofiles",
+  "aiohttp",
+  "arrgh",
+  "blobfile",
+  "botocore",
+  "datasets",
+  "diffusers-cosmos3",
+  "dists-pytorch",
+  "einx",
+  "fastparquet",
+  "flask",
+  "flopth",
+  "ftfy",
+  "futureproof",
+  "fvcore",
+  "glfw",
+  "h5py",
+  "imagecodecs",
+  "ipycanvas",
+  "ipyevents",
+  "jupyter-compare-view",
+  "jupyterlab",
+  "kornia",
+  "lerobot",
+  "lpips",
+  "lz4",
+  "matplotlib",
+  "mediapy",
+  "more-itertools",
+  "moviepy",
+  "multi-storage-client[boto3,google-cloud-storage,fsspec,observability-otel,vault]==0.44.0",
+  "ninja",
+  "open-clip-torch",
+  "openai",
+  "opencv-contrib-python",
+  "packaging",
+  "pandas",
+  "parse",
+  "peft",
+  "pillow>=12.2.0",
+  "plyfile",
+  "polars",
+  "polyscope",
+  "psycopg2-binary",
+  "py3nvml",
+  "pycocotools",
+  "pydispatcher",
+  "pygltflib",
+  "pyopengl",
+  "pytest",
+  "python-memcached",
+  "pytz",
+  "pyyaml",
+  "robotmq",
+  "rsa",
+  "s3fs",
+  "scikit-image",
+  "semver",
+  "setuptools",
+  "slangtorch",
+  "soundfile",
+  "tensorstore",
+  "tiktoken",
+  "timm",
+  "torch-fidelity",
+  "torch-optimizer",
+  "trimesh",
+  "typeguard",
+  "urllib3",
+  "wandb",
+  "webdataset",
+  "xatlas",
+  "zarr",
+]
+
+[dependency-groups]
+dev = [
+  "hatch",
+  "pyinstrument",
+  "pyrefly==0.55.0",
+  "pytest",
+  "pytest-custom_exit_code",
+  "pytest-cov",
+  "pytest-env",
+  "pytest-instafail",
+  "pytest-regressions",
+  "pytest-xdist",
+  "ruff==0.12.7",
+  "uv",
+]
+# LIBERO simulator dependencies for the closed-loop eval client.
+# Mirrors packages/cosmos-policy
+# `libero` group; `libero` from PyPI declares `robosuite` transitively so we
+# don't need to list it here. The numpy upper bound that LIBERO/robosuite/numba
+# needs is enforced via `[tool.uv].override-dependencies` (cannot be group-scoped
+# because uv overrides are global).
+libero = [
+  "bddl",
+  "cloudpickle",
+  "draccus",
+  "easydict",
+  "gym",
+  "imageio[ffmpeg]",
+  "libero",
+  "mujoco==3.3.2",
+]
+# WebSocket policy server (closed-loop robot policy eval via openpi protocol).
+# See docs/action_policy_robolab_websocket.md.
+policy-server = [
+  "filelock>=3.27.0",
+  "openpi-server",
+]
+
+[project.readme]
+content-type = "text/markdown"
+text = '''
+# Cosmos3-VFM
+
+[Documentation](https://github.com/NVIDIA/cosmos-framework/blob/main/README.md)
+'''
+
+[project.urls]
+documentation = "https://github.com/NVIDIA/cosmos-framework/blob/main/README.md"
+homepage = "https://research.nvidia.com/labs/dir/cosmos3"
+issues = "https://github.com/NVIDIA/cosmos-framework/issues"
+repository = "https://github.com/NVIDIA/cosmos-framework"
+
+[tool.uv]
+required-version = ">=0.11.3"
+conflicts = []
+override-dependencies = [
+  # Lower bound defeats robomimic/robosuite's old numpy 1.x pins; upper bound
+  # is required by numba (transitive of robosuite via the `libero` group), whose
+  # latest release supports numpy <2.3. uv overrides are global, so this also
+  # applies when `--group=libero` is not active — acceptable because no other
+  # group currently needs numpy 2.3+.
+  "numpy>=2.0.0,<2.3",
+  "lightning; sys_platform == 'never'", # PyPi quarantined: https://pypi.org/project/lightning/
+  "pynvml; sys_platform == 'never'",
+]
+required-environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "sys_platform == 'linux' and platform_machine == 'aarch64'",
+]
+
+[tool.uv.sources]
+diffusers-cosmos3 = { path = "packages/diffusers-cosmos3", editable = true }
+lerobot = { git = "https://github.com/mli0603/lerobot.git" }
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+torch_npu = { index = "torch_npu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "torch_npu"
+url = "https://repo.huaweicloud.com/repository/pypi/simple"
+explicit = true
+
+[tool.uv.audit]
+ignore = [
+  # diskcache: No known fix
+  "GHSA-w8v5-vhqr-4h9v",
+  # transformers: Upgrade to >=5
+  "GHSA-69w3-r845-3855",
+  "PYSEC-2025-217",
+  # flash-attn: flash-attn deserialization isn't used in cosmos3 package
+  "GHSA-7g5w-pq96-8c5w",
+  # Need diffusers 0.38
+  "GHSA-7wx4-6vff-v64p",
+  "GHSA-98h9-4798-4q5v",
+  "PYSEC-2026-41",
+  # torch, no fix
+  "PYSEC-2026-139",
+  # Need vllm 0.20
+  "GHSA-83vm-p52w-f9pw",
+  "GHSA-hpv8-x276-m59f"
+]
+
+[tool.hatch.build.targets.sdist]
+packages = [
+  "cosmos_framework",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+  "cosmos_framework",
+]
+exclude = [
+  "*_test.py",
+]

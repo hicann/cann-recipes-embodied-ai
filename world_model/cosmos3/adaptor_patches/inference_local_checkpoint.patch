@@ -1,0 +1,55 @@
+# Adapted from
+# https://github.com/NVIDIA/cosmos-framework.git
+# Copyright (c) 2026, HUAWEI CORPORATION.  All rights reserved.
+diff --git a/cosmos_framework/inference/inference.py b/cosmos_framework/inference/inference.py
+index 564da97..54a55a6 100644
+--- a/cosmos_framework/inference/inference.py
++++ b/cosmos_framework/inference/inference.py
+@@ -1065,24 +1065,38 @@ class OmniInference(Inference):
+                 config = None
+             else:
+                 model_dict = setup_args.load_model_config_dict()
+-                if setup_args.vlm_processor_from_checkpoint:
++                if setup_args.vlm_processor_from_checkpoint or (
++                    Path(checkpoint_path, "text_tokenizer").is_dir()
++                ):
+                     # Source the VLM processor from the loaded checkpoint's own
+                     # bundled files instead of the repository hardcoded in the
+                     # model config. Drops the redundant base-model download.
++                    # Handles both ``build_processor_lazy`` (original internal
++                    # config) and ``create_qwen2_tokenizer_with_download``
++                    # (public config rewrite) target types by replacing the
++                    # entire tokenizer node.
+                     tokenizer_cfg = model_dict["config"]["vlm_config"]["tokenizer"]
+-                    tokenizer_cfg.pop("repository", None)
+-                    tokenizer_cfg.pop("revision", None)
+-                    tokenizer_cfg.pop("subdir", None)
++                    tokenizer_cfg.clear()
++                    tokenizer_cfg["_target_"] = "cosmos_framework.data.vfm.processors.build_processor"
+                     tokenizer_cfg["tokenizer_type"] = str(checkpoint_path)
++                # Video VAE (Wan2.2): if the user placed Wan2.2_VAE.pth next to the
++                # checkpoint, use it directly instead of downloading from HF.
++                video_vae_cfg = model_dict["config"].get("tokenizer")
++                if video_vae_cfg is not None:
++                    local_vae = Path(checkpoint_path) / "Wan2.2_VAE.pth"
++                    if local_vae.is_file():
++                        video_vae_cfg["bucket_name"] = ""
++                        video_vae_cfg["vae_path"] = str(local_vae)
+-                # AVAE source: the configured ``avae_path`` when set, else the loaded
+-                # checkpoint's bundled ``sound_tokenizer/``. The inference-only
+-                # ``from_checkpoint`` key (default False) forces bundled; pop it so it
+-                # never reaches AVAEInterface.
++                # AVAE source: prefer the loaded checkpoint's bundled
++                # ``sound_tokenizer/`` by default to keep offline local-checkpoint
++                # inference self-contained. The inference-only ``from_checkpoint``
++                # key can still be set to False to honor a configured external
++                # ``avae_path``; pop it so it never reaches AVAEInterface.
+                 sound_cfg = model_dict["config"].get("sound_tokenizer")
+                 if sound_cfg is not None:
+-                    from_checkpoint = sound_cfg.pop("from_checkpoint", False)
++                    from_checkpoint = sound_cfg.pop("from_checkpoint", True)
+                     sound_tokenizer_dir = Path(checkpoint_path) / "sound_tokenizer"
+                     if sound_tokenizer_dir.is_dir() and (from_checkpoint or not sound_cfg.get("avae_path")):
+                         from cosmos_framework.inference.common.checkpoints import (
+                             _AVAE_LEGACY_CKPT_NAME,
+                             _materialize_avae_ckpt,
