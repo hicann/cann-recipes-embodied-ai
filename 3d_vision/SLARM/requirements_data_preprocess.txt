@@ -1,0 +1,10 @@
+torch
+waymo-open-dataset-tf-2-11-0==1.6.1
+tensorflow==2.11.0
+nuscenes-devkit
+tqdm
+imageio
+imageio[ffmpeg]
+scipy
+gdown
+gsutil

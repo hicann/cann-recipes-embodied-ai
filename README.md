@@ -131,6 +131,8 @@ flowchart TB
 |[在线推理](3d_vision/vggt/README.md)|Atlas A2/A3 | 在线推理 | 三维重建模型，支持图像生成对应的三维重建场景。| **~1.12s** (25张图片输入)|
 | **3DGS** | | | | |
 | [训练与推理](3d_vision/gaussian_splatting/README.md) | Atlas A2 | 训练/推理 | 基于gsplat开源加速库，针对NPU实现Alpha-blending、视锥剔除、负载均衡、Precise Intersection等融合算子优化。 | - |
+| **SLARM** | | | | |
+| [推理](3d_vision/SLARM/README.md) | Atlas A3 | 推理 | CVPR 2026前馈式动态场景重建模型，从稀疏多视角序列联合学习3D高斯与场景流，支持实时渲染、语义分割与流式因果推理。 | - |
 
 ## 🧩 能力入口
 
@@ -223,7 +225,8 @@ flowchart TB
 ├─3d_vision                                     # 3D视觉模型目录
 │   ├─Hunyuan3D                                 # Hunyuan3D 2.0三维生成模型样例
 │   ├─vggt                                      # VGGT三维重建模型样例
-│   └─gaussian_splatting                        # 3D Gaussian Splatting训推优化样例
+│   ├─gaussian_splatting                        # 3D Gaussian Splatting训推优化样例
+│   └─SLARM                                     # SLARM前馈式动态场景重建模型训推样例
 ├─module                                        # 公共模块目录
 │   └─dit_cache                                 # DiT缓存加速模块
 └─ops                                            # 自定义融合算子目录
