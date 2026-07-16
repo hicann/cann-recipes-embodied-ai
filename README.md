@@ -1,6 +1,7 @@
 # CANN Recipes for Embodied Intelligence
 
 ## 🚀 Latest News
+- [2026/07] Cosmos3 世界模型在昇腾 Atlas A3 上已支持[推理](world_model/cosmos3/README.md)，覆盖 T2V、I2V、V2V 视频生成场景，样例已开源。
 - [2026/05] NMR 神经运动重定向模型在昇腾 Atlas A3 上已支持[训练和推理](locomotion/NMR)，可将人体 SMPL-X 动作重定向到 Unitree G1 人形机器人，样例已开源。
 - [2026/05] AgiBot 机械臂世界模型样例在昇腾 Atlas A2 上已支持[训练](world_model/agibot-arm-world-model/train)与[在线推理](world_model/agibot-arm-world-model/infer_with_torch)，样例已开源。
 - [2026/05] 仓库已由 `cann-recipes-embodied-intelligence` 正式更名为 `cann-recipes-embodied-ai`，新地址：https://gitcode.com/CANN/cann-recipes-embodied-ai ，原有链接将自动跳转。
@@ -95,6 +96,8 @@ flowchart TB
 | [在线推理](world_model/cosmos-predict2.5/README.md) | Atlas A3 | 在线推理 | Cosmos世界基础模型，支持文本/图像生成世界(Text2World/Image2World)，生成物理一致的视频。 | **~920 s** (生成5.8s视频) |
 | **Cosmos-Transfer2.5-2B** | | | | |
 | [在线推理](world_model/cosmos-transfer2.5/README.md) | Atlas A3 | 在线推理 | Cosmos世界基础模型，支持多控制信号(深度图/语义分割/边缘检测等)的视频风格转换。 | - |
+| **Cosmos3** | | | | |
+| [推理](world_model/cosmos3/README.md) | Atlas A3 | 推理 | Cosmos世界基础模型，支持文生视频、图生视频、视频生视频等多模态视频生成任务。 | - |
 | **AgiBot Arm World Model** | | | | |
 | [训练](world_model/agibot-arm-world-model/train) | Atlas A2 | 训练 | 基于 Wan2.1-Fun-V1.1-1.3B-Control 在 AgiBotWorld 数据集上微调的机械臂世界模型，支持文本/参考图/动作轨迹条件，默认 8 卡训练。 | - |
 | [在线推理](world_model/agibot-arm-world-model/infer_with_torch) | Atlas A2 | 在线推理 | 基于 PyTorch 的分块自回归推理，支持文本与轨迹引导的机械臂视频生成。 | - |
@@ -214,6 +217,7 @@ flowchart TB
 ├─world_model                                   # 世界模型目录
 │   ├─cosmos-predict2.5                         # Cosmos-Predict2.5-2B世界模型
 │   ├─cosmos-transfer2.5                        # Cosmos-Transfer2.5-2B世界模型
+│   ├─cosmos3                                   # Cosmos3 世界模型
 │   └─agibot-arm-world-model                    # AgiBot 机械臂世界模型 (Wan2.1-Fun-V1.1-1.3B-Control)
 │       ├─train                                 # AgiBot 训练样例
 │       └─infer_with_torch                      # AgiBot torch 推理样例

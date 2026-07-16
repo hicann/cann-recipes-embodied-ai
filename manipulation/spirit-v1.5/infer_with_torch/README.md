@@ -35,7 +35,7 @@ Spirit v1.5是由千寻智能自研的具身智能模型，在2026.1.12的RoboCh
     | [Spirit-v1.5](https://huggingface.co/Spirit-AI-robotics/Spirit-v1.5) | Base Model |
     | [Spirit-v1.5-move-objects-into-box](https://huggingface.co/Spirit-AI-robotics/Spirit-v1.5-for-RoboChallenge-move-objects-into-box) | Fine-tuned Model |
 
-5. 下载[Qwen/Qwen3VL-4B-Instruct] (https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct)的权重（可选）
+5. 下载[Qwen/Qwen3VL-4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct)的权重（可选）
 
 
 ## 运行环境准备
