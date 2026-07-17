@@ -267,7 +267,7 @@ index 7e02f879..39d59983 100644
          close_envs(eval_env)
  
 diff --git a/src/lerobot/utils/utils.py b/src/lerobot/utils/utils.py
-index c7ad2bbd..9ea353c0 100644
+index c7ad2bbd..423fb086 100644
 --- a/src/lerobot/utils/utils.py
 +++ b/src/lerobot/utils/utils.py
 @@ -1,5 +1,8 @@
@@ -398,11 +398,11 @@ index c7ad2bbd..9ea353c0 100644
  
  
  def move_cursor_up(lines):
-
 diff --git a/src/lerobot/datasets/video_utils.py b/src/lerobot/datasets/video_utils.py
+index 84ce1377..3ea4c4cf 100644
 --- a/src/lerobot/datasets/video_utils.py
 +++ b/src/lerobot/datasets/video_utils.py
-@@ -232,6 +232,7 @@ class FrameTimestampError(ValueError):
+@@ -215,6 +215,7 @@ class FrameTimestampError(ValueError):
  
  
  _default_decoder_cache = VideoDecoderCache()
@@ -410,45 +410,44 @@ diff --git a/src/lerobot/datasets/video_utils.py b/src/lerobot/datasets/video_ut
  
  
  def decode_video_frames_torchcodec(
-@@ -268,11 +269,14 @@ def decode_video_frames_torchcodec(
-     loaded_ts = []
-     loaded_frames = []
+@@ -252,8 +253,11 @@ def decode_video_frames_torchcodec(
  
-+    metadata = getattr(decoder, "metadata", None)
-+    average_fps = float(getattr(metadata, "average_fps", 0.0) or 0.0)
+     # get metadata for frame information
+     metadata = decoder.metadata
+-    average_fps = metadata.average_fps
++    average_fps = float(metadata.average_fps)
 +    effective_tolerance_s = tolerance_s
 +    if average_fps > 0:
 +        effective_tolerance_s = max(tolerance_s, (1.05 / average_fps) + 1e-6)
-+
-     get_frames_at_params = inspect.signature(decoder.get_frames_at).parameters
--    if "indices" in get_frames_at_params:
--        metadata = decoder.metadata
--        average_fps = metadata.average_fps
--        frame_indices = [round(ts * average_fps) for ts in timestamps]
-+    if "indices" in get_frames_at_params and average_fps > 0:
-+        frame_indices = [int(ts * average_fps + 0.5) for ts in timestamps]
-         frames_batch = decoder.get_frames_at(indices=frame_indices)
- 
-         for frame, pts in zip(frames_batch.data, frames_batch.pts_seconds, strict=True):
-@@ -298,9 +302,18 @@ def decode_video_frames_torchcodec(
+     # convert timestamps to frame indices
+-    frame_indices = [round(ts * average_fps) for ts in timestamps]
++    frame_indices = [int(ts * average_fps + 0.5) for ts in timestamps]
+     # retrieve frames based on indices
+     frames_batch = decoder.get_frames_at(indices=frame_indices)
+@@ -271,9 +275,24 @@ def decode_video_frames_torchcodec(
      dist = torch.cdist(query_ts[:, None], loaded_ts[:, None], p=1)
      min_, argmin_ = dist.min(1)
  
 -    is_within_tol = min_ < tolerance_s
 +    is_within_tol = min_ <= effective_tolerance_s
-+    if is_within_tol.all() and effective_tolerance_s > tolerance_s and (min_ > tolerance_s).any():
++    if (
++        is_within_tol.all()
++        and effective_tolerance_s > tolerance_s
++        and (min_ > tolerance_s).any()
++    ):
 +        global _TORCHCODEC_RELAXED_TOL_WARNING_EMITTED
 +        if not _TORCHCODEC_RELAXED_TOL_WARNING_EMITTED:
 +            logging.warning(
-+                "torchcodec frame lookup exceeded the strict timestamp tolerance but stayed within one frame interval; "
-+                "accepting the nearest decoded frame to keep the fast path enabled. "
++                "torchcodec frame lookup exceeded the strict timestamp tolerance but stayed within one frame "
++                "interval; accepting the nearest decoded frame to keep the fast path enabled. "
 +                f"{tolerance_s=}, {effective_tolerance_s=}"
 +            )
 +            _TORCHCODEC_RELAXED_TOL_WARNING_EMITTED = True
 +
      assert is_within_tol.all(), (
 -        f"One or several query timestamps unexpectedly violate the tolerance ({min_[~is_within_tol]} > {tolerance_s=})."
-+        f"One or several query timestamps unexpectedly violate the tolerance ({min_[~is_within_tol]} > {effective_tolerance_s=})."
++        f"One or several query timestamps unexpectedly violate the tolerance "
++        f"({min_[~is_within_tol]} > {effective_tolerance_s=})."
          "It means that the closest frame that can be loaded from the video is too far away in time."
          "This might be due to synchronization issues with timestamps during data collection."
          "To be safe, we advise to ignore this item during training."

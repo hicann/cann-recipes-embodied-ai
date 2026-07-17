@@ -137,6 +137,19 @@ install_platform_stack() {
     fi
 }
 
+apply_patch_if_needed() {
+    local patch_path="$1"
+    [[ -f "$patch_path" ]] || error "Patch file not found: $patch_path"
+    if git apply --check "$patch_path" >/dev/null 2>&1; then
+        info "Applying patch: $(basename "$patch_path")"
+        git apply "$patch_path"
+    elif git apply --reverse --check "$patch_path" >/dev/null 2>&1; then
+        info "Patch already applied: $(basename "$patch_path")"
+    else
+        error "Patch cannot be cleanly applied: $(basename "$patch_path"). Please reset local lerobot changes or prepare a clean checkout at commit ${LEROBOT_COMMIT}."
+    fi
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --create-conda)
@@ -199,16 +212,7 @@ cd "$LEROBOT_ROOT"
 git fetch origin "$LEROBOT_COMMIT" --depth=1 || true
 git checkout "$LEROBOT_COMMIT"
 
-if [[ -f "$PATCH_PATH" ]]; then
-    if git apply --check "$PATCH_PATH" >/dev/null 2>&1; then
-        info "Applying verified Ascend training patch"
-        git apply "$PATCH_PATH"
-    else
-        warn "Patch already applied or cannot be cleanly applied; skipping git apply"
-    fi
-else
-    warn "Patch file not found: $PATCH_PATH"
-fi
+apply_patch_if_needed "$PATCH_PATH"
 
 install_platform_stack
 

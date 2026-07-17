@@ -45,7 +45,7 @@ index e442b14d..de114a7e 100644
  
  
  def resize_with_pad(img, width, height, pad_value=-1):
-@@ -245,6 +253,79 @@ class SmolVLAPolicy(PreTrainedPolicy):
+@@ -245,6 +253,84 @@ class SmolVLAPolicy(PreTrainedPolicy):
          self.model = VLAFlowMatching(config, rtc_processor=self.rtc_processor)
          self.reset()
  
@@ -130,7 +130,7 @@ index e442b14d..de114a7e 100644
      def reset(self):
          """This should be called whenever the environment is reset."""
          self._queues = {
-@@ -527,6 +608,7 @@ class VLAFlowMatching(nn.Module):
+@@ -527,6 +613,7 @@ class VLAFlowMatching(nn.Module):
              num_vlm_layers=self.config.num_vlm_layers,
              self_attn_every_n_layers=self.config.self_attn_every_n_layers,
              expert_width_multiplier=self.config.expert_width_multiplier,
@@ -138,7 +138,7 @@ index e442b14d..de114a7e 100644
          )
          self.state_proj = nn.Linear(
              self.config.max_state_dim, self.vlm_with_expert.config.text_config.hidden_size
-@@ -709,7 +791,7 @@ class VLAFlowMatching(nn.Module):
+@@ -709,7 +796,7 @@ class VLAFlowMatching(nn.Module):
          att_masks += [1] * self.config.chunk_size
          embs = torch.cat(embs, dim=1)
          pad_masks = torch.cat(pad_masks, dim=1)
@@ -147,7 +147,7 @@ index e442b14d..de114a7e 100644
          att_masks = att_masks[None, :].expand(bsize, len(att_masks))
          return embs, pad_masks, att_masks
  
-@@ -735,7 +817,7 @@ class VLAFlowMatching(nn.Module):
+@@ -735,7 +822,7 @@ class VLAFlowMatching(nn.Module):
          att_masks = torch.cat([prefix_att_masks, suffix_att_masks], dim=1)
  
          att_2d_masks = make_att_2d_masks(pad_masks, att_masks)
@@ -156,7 +156,7 @@ index e442b14d..de114a7e 100644
          (_, suffix_out), _ = self.vlm_with_expert.forward(
              attention_mask=att_2d_masks,
              position_ids=position_ids,
-@@ -773,7 +855,9 @@ class VLAFlowMatching(nn.Module):
+@@ -773,7 +860,9 @@ class VLAFlowMatching(nn.Module):
              images, img_masks, lang_tokens, lang_masks, state=state
          )
          prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
@@ -167,7 +167,7 @@ index e442b14d..de114a7e 100644
          # Compute image and language key value cache
          _, past_key_values = self.vlm_with_expert.forward(
              attention_mask=prefix_att_2d_masks,
-@@ -847,8 +931,10 @@ class VLAFlowMatching(nn.Module):
+@@ -847,8 +936,10 @@ class VLAFlowMatching(nn.Module):
          suffix_att_2d_masks = make_att_2d_masks(suffix_pad_masks, suffix_att_masks)
  
          full_att_2d_masks = torch.cat([prefix_pad_2d_masks, suffix_att_2d_masks], dim=2)
@@ -240,10 +240,10 @@ index 4cf9c409..be76f4eb 100644
  # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
  #
  # Licensed under the Apache License, Version 2.0 (the "License");
-@@ -60,11 +63,16 @@ from functools import partial
- from pathlib import Path
+@@ -61,10 +64,17 @@ from pathlib import Path
  from pprint import pformat
  from typing import Any, TypedDict
+ 
 +import os
 +import torch
 +import torch_npu
@@ -259,7 +259,7 @@ index 4cf9c409..be76f4eb 100644
  from termcolor import colored
  from torch import Tensor, nn
  from tqdm import trange
-@@ -91,6 +99,7 @@ from lerobot.utils.utils import (
+@@ -91,6 +101,7 @@ from lerobot.utils.utils import (
  )
  
  
@@ -267,7 +267,7 @@ index 4cf9c409..be76f4eb 100644
  def rollout(
      env: gym.vector.VectorEnv,
      policy: PreTrainedPolicy,
-@@ -133,7 +142,7 @@ def rollout(
+@@ -133,7 +144,9 @@ def rollout(
      Returns:
          The dictionary described above.
      """
@@ -278,7 +278,7 @@ index 4cf9c409..be76f4eb 100644
  
      # Reset the policy and environments.
      policy.reset()
-@@ -165,7 +174,6 @@ def rollout(
+@@ -165,7 +178,6 @@ def rollout(
              all_observations.append(deepcopy(observation))
  
          # Infer "task" from attributes of environments.
@@ -286,7 +286,7 @@ index 4cf9c409..be76f4eb 100644
          observation = add_envs_task(env, observation)
  
          # Apply environment-specific preprocessing (e.g., LiberoProcessorStep for LIBERO)
-@@ -182,7 +190,7 @@ def rollout(
+@@ -182,7 +194,9 @@ def rollout(
  
          # Convert to CPU / numpy.
          action_numpy: np.ndarray = action.to("cpu").numpy()
@@ -297,7 +297,7 @@ index 4cf9c409..be76f4eb 100644
  
          # Apply the next action.
          observation, reward, terminated, truncated, info = env.step(action_numpy)
-@@ -217,9 +225,13 @@ def rollout(
+@@ -217,9 +231,13 @@ def rollout(
  
          step += 1
          running_success_rate = (
@@ -313,7 +313,7 @@ index 4cf9c409..be76f4eb 100644
          progbar.update()
  
      # Track the final observation.
-@@ -237,7 +249,9 @@ def rollout(
+@@ -237,7 +255,9 @@ def rollout(
      if return_observations:
          stacked_observations = {}
          for key in all_observations[0]:
@@ -324,7 +324,7 @@ index 4cf9c409..be76f4eb 100644
          ret[OBS_STR] = stacked_observations
  
      if hasattr(policy, "use_original_modules"):
-@@ -246,6 +260,7 @@ def rollout(
+@@ -246,6 +266,7 @@ def rollout(
      return ret
  
  
@@ -332,7 +332,7 @@ index 4cf9c409..be76f4eb 100644
  def eval_policy(
      env: gym.vector.VectorEnv,
      policy: PreTrainedPolicy,
-@@ -303,7 +318,9 @@ def eval_policy(
+@@ -303,7 +324,9 @@ def eval_policy(
              return
          n_to_render_now = min(max_episodes_rendered - n_episodes_rendered, env.num_envs)
          if isinstance(env, gym.vector.SyncVectorEnv):
@@ -343,7 +343,7 @@ index 4cf9c409..be76f4eb 100644
          elif isinstance(env, gym.vector.AsyncVectorEnv):
              # Here we must render all frames and discard any we don't need.
              ep_frames.append(np.stack(env.call("render")[:n_to_render_now]))
-@@ -315,7 +332,9 @@ def eval_policy(
+@@ -315,7 +338,9 @@ def eval_policy(
          episode_data: dict | None = None
  
      # we dont want progress bar when we use slurm, since it clutters the logs
@@ -354,7 +354,7 @@ index 4cf9c409..be76f4eb 100644
      for batch_ix in progbar:
          # Cache frames for rendering videos. Each item will be (b, h, w, c), and the list indexes the rollout
          # step.
-@@ -326,7 +345,8 @@ def eval_policy(
+@@ -326,7 +351,8 @@ def eval_policy(
              seeds = None
          else:
              seeds = range(
@@ -364,7 +364,7 @@ index 4cf9c409..be76f4eb 100644
              )
          rollout_data = rollout(
              env=env,
-@@ -348,36 +368,51 @@ def eval_policy(
+@@ -348,36 +374,54 @@ def eval_policy(
  
          # Make a mask with shape (batch, n_steps) to mask out rollout data after the first done
          # (batch-element-wise). Note the `done_indices + 1` to make sure to keep the data from the done step.
@@ -428,7 +428,7 @@ index 4cf9c409..be76f4eb 100644
  
          # Maybe render video for visualization.
          if max_episodes_rendered > 0 and len(ep_frames) > 0:
-@@ -395,7 +430,9 @@ def eval_policy(
+@@ -395,7 +439,9 @@ def eval_policy(
                      target=write_video,
                      args=(
                          str(video_path),
@@ -439,7 +439,7 @@ index 4cf9c409..be76f4eb 100644
                          env.unwrapped.metadata["render_fps"],
                      ),
                  )
-@@ -404,7 +441,9 @@ def eval_policy(
+@@ -404,7 +450,9 @@ def eval_policy(
                  n_episodes_rendered += 1
  
          progbar.set_postfix(
@@ -450,7 +450,7 @@ index 4cf9c409..be76f4eb 100644
          )
  
      # Wait till all video rendering threads are done.
-@@ -421,6 +460,7 @@ def eval_policy(
+@@ -421,6 +469,7 @@ def eval_policy(
                  "success": success,
                  "seed": seed,
              }
@@ -458,7 +458,7 @@ index 4cf9c409..be76f4eb 100644
              for i, (sum_reward, max_reward, success, seed) in enumerate(
                  zip(
                      sum_rewards[:n_episodes],
-@@ -450,7 +490,11 @@ def eval_policy(
+@@ -450,7 +499,11 @@ def eval_policy(
  
  
  def _compile_episode_data(
@@ -471,7 +471,7 @@ index 4cf9c409..be76f4eb 100644
  ) -> dict:
      """Convenience function for `eval_policy(return_episode_data=True)`
  
-@@ -468,7 +512,9 @@ def _compile_episode_data(
+@@ -468,7 +521,9 @@ def _compile_episode_data(
          # Here we do `num_frames - 1` as we don't want to include the last observation frame just yet.
          ep_dict = {
              ACTION: rollout_data[ACTION][ep_ix, : num_frames - 1],
@@ -482,7 +482,7 @@ index 4cf9c409..be76f4eb 100644
              "frame_index": torch.arange(0, num_frames - 1, 1),
              "timestamp": torch.arange(0, num_frames - 1, 1) / fps,
              DONE: rollout_data["done"][ep_ix, : num_frames - 1],
-@@ -489,7 +535,9 @@ def _compile_episode_data(
+@@ -489,7 +544,9 @@ def _compile_episode_data(
      for key in ep_dicts[0]:
          data_dict[key] = torch.cat([x[key] for x in ep_dicts])
  
@@ -493,7 +493,7 @@ index 4cf9c409..be76f4eb 100644
  
      return data_dict
  
-@@ -498,17 +546,18 @@ def _compile_episode_data(
+@@ -498,17 +555,18 @@ def _compile_episode_data(
  def eval_main(cfg: EvalPipelineConfig):
      logging.info(pformat(asdict(cfg)))
  
@@ -517,7 +517,7 @@ index 4cf9c409..be76f4eb 100644
  
      logging.info("Making policy.")
  
-@@ -520,7 +569,8 @@ def eval_main(cfg: EvalPipelineConfig):
+@@ -520,7 +578,8 @@ def eval_main(cfg: EvalPipelineConfig):
  
      policy.eval()
  
@@ -527,7 +527,7 @@ index 4cf9c409..be76f4eb 100644
      preprocessor_overrides = {
          "device_processor": {"device": str(policy.config.device)},
          "rename_observations_processor": {"rename_map": cfg.rename_map},
-@@ -535,7 +585,9 @@ def eval_main(cfg: EvalPipelineConfig):
+@@ -535,7 +594,9 @@ def eval_main(cfg: EvalPipelineConfig):
      # Create environment-specific preprocessor and postprocessor (e.g., for LIBERO environments)
      env_preprocessor, env_postprocessor = make_env_pre_post_processors(env_cfg=cfg.env)
  
@@ -538,7 +538,7 @@ index 4cf9c409..be76f4eb 100644
          info = eval_policy_all(
              envs=envs,
              policy=policy,
-@@ -549,13 +601,13 @@ def eval_main(cfg: EvalPipelineConfig):
+@@ -549,13 +610,13 @@ def eval_main(cfg: EvalPipelineConfig):
              start_seed=cfg.seed,
              max_parallel_tasks=cfg.env.max_parallel_tasks,
          )
@@ -556,7 +556,7 @@ index 4cf9c409..be76f4eb 100644
      # Close all vec envs
      close_envs(envs)
  
-@@ -692,7 +744,9 @@ def eval_policy_all(
+@@ -692,7 +753,9 @@ def eval_policy_all(
      tasks = [(tg, tid, vec) for tg, group in envs.items() for tid, vec in group.items()]
  
      # accumulators: track metrics at both per-group level and across all groups
@@ -567,7 +567,7 @@ index 4cf9c409..be76f4eb 100644
      overall: dict[str, list] = {k: [] for k in ACC_KEYS}
      per_task_infos: list[dict] = []
  
-@@ -741,7 +795,9 @@ def eval_policy_all(
+@@ -741,7 +804,9 @@ def eval_policy_all(
          for task_group, task_id, env in tasks:
              tg, tid, metrics = task_runner(task_group, task_id, env)
              _accumulate_to(tg, metrics)
@@ -578,7 +578,7 @@ index 4cf9c409..be76f4eb 100644
      else:
          # threaded path: submit all tasks, consume completions on main thread and accumulate there
          with cf.ThreadPoolExecutor(max_workers=max_parallel_tasks) as executor:
-@@ -752,7 +808,9 @@ def eval_policy_all(
+@@ -752,7 +817,9 @@ def eval_policy_all(
              for fut in cf.as_completed(fut2meta):
                  tg, tid, metrics = fut.result()
                  _accumulate_to(tg, metrics)
@@ -589,7 +589,7 @@ index 4cf9c409..be76f4eb 100644
  
      # compute aggregated metrics helper (robust to lists/scalars)
      def _agg_from_list(xs):
-@@ -767,7 +825,11 @@ def eval_policy_all(
+@@ -767,7 +834,11 @@ def eval_policy_all(
          groups_aggregated[group] = {
              "avg_sum_reward": _agg_from_list(acc["sum_rewards"]),
              "avg_max_reward": _agg_from_list(acc["max_rewards"]),
@@ -602,7 +602,7 @@ index 4cf9c409..be76f4eb 100644
              "n_episodes": len(acc["sum_rewards"]),
              "video_paths": list(acc["video_paths"]),
          }
-@@ -776,7 +838,11 @@ def eval_policy_all(
+@@ -776,7 +847,11 @@ def eval_policy_all(
      overall_agg = {
          "avg_sum_reward": _agg_from_list(overall["sum_rewards"]),
          "avg_max_reward": _agg_from_list(overall["max_rewards"]),
