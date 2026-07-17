@@ -126,7 +126,7 @@ python3 convert_and_verify_onnx.py \
   --model-path models/openvla-7b-finetuned-libero-object \
   --vision-export-dir outputs/onnx/vision \
   --llama-prefill-export-dir outputs/onnx/llama_prefill \
-  --llama-decoder-export-dir outputs/onnx/llama_decode \
+  --llama-decoder-export-dir outputs/onnx/llama_decoder \
   --unnorm-key libero_object
 ```
 
@@ -204,7 +204,7 @@ python3 -m experiments.robot.libero.run_libero_eval \
     --projector_om outputs/om/vision/projector.om \
     --embedding_om outputs/om/vision/embedding.om \
     --prefill_om outputs/om/llama_prefill/vla_prefill.om \
-    --decode_om outputs/om/llama_decode/vla_decoder.om
+    --decode_om outputs/om/llama_decoder/vla_decoder.om
 ```
 
 输出：
@@ -226,9 +226,9 @@ python3 verify_om_onnx.py \
    --unnorm-key libero_object \
    --vision-backbone-om outputs/om/vision/vision_backbone.om \
    --projector-om outputs/om/vision/projector.om \
-   --embedding-om outputs/omvision/embedding.om \
+   --embedding-om outputs/om/vision/embedding.om \
    --prefill-om outputs/om/llama_prefill/vla_prefill.om \
-   --decode-om outputs/om/llama_decode/vla_decoder.om
+   --decode-om outputs/om/llama_decoder/vla_decoder.om
 ```
 
 ### 2）基于仿真模拟器的功能测试（MuJoCo / LIBERO）
@@ -245,7 +245,7 @@ python3 -m experiments.robot.libero.run_libero_eval \
     --projector_om outputs/om/vision/projector.om \
     --embedding_om outputs/om/vision/embedding.om \
     --prefill_om outputs/om/llama_prefill/vla_prefill.om \
-    --decode_om outputs/om/llama_decode/vla_decoder.om
+    --decode_om outputs/om/llama_decoder/vla_decoder.om
 ```
 
 示例效果: \
@@ -268,7 +268,8 @@ python3 -m experiments.robot.libero.run_libero_eval \
 
 ```text
 格式
-├── readme.md                       # 本文件
+├── README.md                       # 本文件
+├── README_en.md                    # 英文使用指南
 ├── models                          # Huggingface或其他来源下载的模型
 ├── openvla/                        
 |   ├── convert_and_verify_onnx.py  # PyTorch -> ONNX 转化脚本
