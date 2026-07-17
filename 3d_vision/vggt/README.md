@@ -29,11 +29,13 @@
   ```shell
   git clone https://gitcode.com/cann/cann-recipes-embodied-ai.git
   ```
-- VGGT 模型权重下载：[VGGT model checkpoint](https://huggingface.co/spaces/facebook/vggt)，并将权重文件`model.pt`复制到ckpt目录下：
+- 通过 HuggingFace 下载 VGGT 模型权重 `model.pt`（权重来源：[VGGT model checkpoint](https://huggingface.co/facebook/VGGT-1B)），并将权重文件放到项目 `ckpt` 目录下，按以下步骤操作：
   ```shell
   pip install -U huggingface_hub
   export HF_ENDPOINT=https://hf-mirror.com
-  hf download facebook/VGGT-1B --local-dir vggt
+  hf download facebook/VGGT-1B model.pt --local-dir vggt
+  mkdir -p cann-recipes-embodied-ai/3d_vision/vggt/ckpt
+  mv vggt/model.pt cann-recipes-embodied-ai/3d_vision/vggt/ckpt/
   ```
 - 将VGGT仓库的网络模型文件以**非覆盖模式**复制到本项目目录下：
   ```shell

@@ -37,11 +37,13 @@ This sample supports single-card inference and multi-card sequence parallel infe
   ```shell
   git clone https://gitcode.com/cann/cann-recipes-embodied-ai.git
   ```
-- VGGT model weights download: [VGGT model checkpoint](https://huggingface.co/spaces/facebook/vggt), and copy the weights file `model.pt` to the ckpt directory:
+- Download the VGGT model weights `model.pt` via HuggingFace (weights source: [VGGT model checkpoint](https://huggingface.co/facebook/VGGT-1B)), and place the weights file into the project `ckpt` directory. Follow these steps:
   ```shell
   pip install -U huggingface_hub
   export HF_ENDPOINT=https://hf-mirror.com
-  hf download facebook/VGGT-1B --local-dir vggt
+  hf download facebook/VGGT-1B model.pt --local-dir vggt
+  mkdir -p cann-recipes-embodied-ai/3d_vision/vggt/ckpt
+  mv vggt/model.pt cann-recipes-embodied-ai/3d_vision/vggt/ckpt/
   ```
 - Copy the VGGT repository network model files to this project directory in **non-overwrite mode**:
   ```shell
