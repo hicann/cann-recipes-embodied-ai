@@ -1,5 +1,5 @@
 torch==2.7.1
-torch-npu==2.7.1,
+torch-npu==2.7.1
 torchvision==0.22.1
 transformers==4.57.3
 diffusers==0.36.0
@@ -8,7 +8,7 @@ numpy==2.4.0
 pillow==12.1.0
 requests==2.32.5
 scipy==1.16.3
-setuptools>=80.9.0,
-decorator,
-attrs,
-psutil,
+setuptools>=80.9.0
+decorator
+attrs
+psutil
