@@ -14,8 +14,63 @@
 
 import argparse
 import random
+import time
+import logging
+from dataclasses import dataclass
+
 import numpy as np
 import torch
+import torch.distributed as dist
+
+
+@dataclass
+class SPConfig:
+    """Sequence Parallel Configuration"""
+    ulysses_degree: int = 1
+    ring_degree: int = 1
+    use_ring_overlap: bool = True
+
+    @property
+    def sp_degree(self):
+        return self.ulysses_degree * self.ring_degree
+
+
+def setup_distributed(args):
+    """Initialize distributed environment"""
+    if not dist.is_initialized():
+        dist.init_process_group(backend='hccl')
+
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+
+    if args.ulysses_degree * args.ring_degree != world_size:
+        raise ValueError(
+            f"ulysses_degree ({args.ulysses_degree}) * ring_degree ({args.ring_degree}) "
+            f"must equal world_size ({world_size})"
+        )
+
+    ulysses_pg = None
+    ring_pg = None
+    global_pg = None
+
+    global_pg = dist.new_group(ranks=list(range(world_size)))
+
+    if args.ulysses_degree > 1:
+        for i in range(args.ring_degree):
+            start_rank = i * args.ulysses_degree
+            ranks = list(range(start_rank, start_rank + args.ulysses_degree))
+            group = dist.new_group(ranks=ranks)
+            if rank in ranks:
+                ulysses_pg = group
+
+    if args.ring_degree > 1:
+        for i in range(args.ulysses_degree):
+            ranks = list(range(i, world_size, args.ulysses_degree))
+            group = dist.new_group(ranks=ranks)
+            if rank in ranks:
+                ring_pg = group
+
+    return rank, world_size, ulysses_pg, ring_pg, global_pg
 
 
 def fix_random_seed(seed=42):
@@ -127,3 +182,19 @@ def get_pose_evaluation_opts_sp():
                        help="Ring attention degree")
     
     return parser.parse_args()
+
+
+def sync_and_get_time(start_time=None, use_syn=True, log_result=False, num_images=None):
+    """Synchronize NPU and get timestamp."""
+    if use_syn:
+        torch.npu.synchronize()
+    timestamp = time.time()
+    if start_time is not None:
+        timestamp -= start_time
+        if log_result:
+            if num_images is not None:
+                logging.info(f"VGGT inference time cost is: {timestamp*1000:.2f} ms (num_images: {num_images})")
+            else:
+                logging.info(f"VGGT inference time cost is: {timestamp*1000:.2f} ms")
+        return timestamp
+    return timestamp

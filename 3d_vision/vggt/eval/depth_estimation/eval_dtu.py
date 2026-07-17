@@ -7,7 +7,7 @@
 import os
 import sys
 import gc
-from dataclasses import dataclass
+import logging
 
 import cv2
 import numpy as np
@@ -26,73 +26,30 @@ from vggt.models.vggt import VGGT
 from vggt.utils.cast_weight import cast_model_weight
 from dataset_utils.data_io import tocuda, write_cam, save_pfm
 from dataset_utils.dtu import DTUDataset
-from general_utils import fix_random_seed, get_depth_estimation_opts
+from general_utils import fix_random_seed, get_depth_estimation_opts, sync_and_get_time, SPConfig, setup_distributed
 
-
-@dataclass
-class SPConfig:
-    """Sequence Parallel Configuration"""
-    ulysses_degree: int = 1
-    ring_degree: int = 1
-    use_ring_overlap: bool = True
-    
-    @property
-    def sp_degree(self):
-        return self.ulysses_degree * self.ring_degree
-
-
-def setup_distributed(args):
-    """Initialize distributed environment"""
-    if not dist.is_initialized():
-        dist.init_process_group(backend='hccl')
-    
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
-    
-    if args.ulysses_degree * args.ring_degree != world_size:
-        raise ValueError(
-            f"ulysses_degree ({args.ulysses_degree}) * ring_degree ({args.ring_degree}) "
-            f"must equal world_size ({world_size})"
-        )
-    
-    ulysses_pg = None
-    ring_pg = None
-    global_pg = None
-    
-    global_pg = dist.new_group(ranks=list(range(world_size)))
-    
-    if args.ulysses_degree > 1:
-        for i in range(args.ring_degree):
-            start_rank = i * args.ulysses_degree
-            ranks = list(range(start_rank, start_rank + args.ulysses_degree))
-            group = dist.new_group(ranks=ranks)
-            if rank in ranks:
-                ulysses_pg = group
-    
-    if args.ring_degree > 1:
-        for i in range(args.ulysses_degree):
-            ranks = list(range(i, world_size, args.ulysses_degree))
-            group = dist.new_group(ranks=ranks)
-            if rank in ranks:
-                ring_pg = group
-    
-    return rank, world_size, ulysses_pg, ring_pg, global_pg
+logging.basicConfig(level=logging.INFO)
 
 
 def model_inference(model, data, dtype):
     with torch.cuda.amp.autocast(dtype=dtype):
         with torch.no_grad():
             images = torch.stack([view for view in data['imgs']], dim=0).permute(1, 0, 2, 3, 4)
+            num_images = images.shape[0] * images.shape[1]
+            start_time = sync_and_get_time()
             predictions = model(images)
+            exec_time = sync_and_get_time(start_time, log_result=True, num_images=num_images)
             pred_depth = predictions['depth']
             pred_depth_conf = predictions['depth_conf']
-            return pred_depth, pred_depth_conf
+            return pred_depth, pred_depth_conf, exec_time
 
 
 def main(model, test_img_loader, device, args, dtype):
+    exec_time_list = []
     for _, sample in enumerate(test_img_loader):
         sample_cuda = tocuda(sample)
-        pred_depth, pred_depth_conf = model_inference(model, sample_cuda, dtype)
+        pred_depth, pred_depth_conf, exec_time = model_inference(model, sample_cuda, dtype)
+        exec_time_list.append(exec_time)
         del sample_cuda
         filenames = sample["filename"]
         cams = sample["proj_matrices"].numpy()
@@ -124,6 +81,11 @@ def main(model, test_img_loader, device, args, dtype):
             img = np.clip(np.transpose(img, (1, 2, 0)) * 255, 0, 255).astype(np.uint8)
             img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
             cv2.imwrite(img_filename, img_bgr)
+
+    if exec_time_list:
+        avg_time = sum(exec_time_list) / len(exec_time_list)
+        logging.info(f"Execution times (ms): {[t*1000 for t in exec_time_list]}")
+        logging.info(f"Average inference time: {avg_time*1000:.2f} ms ({avg_time:.4f} s)")
 
     return len(test_img_loader)
 

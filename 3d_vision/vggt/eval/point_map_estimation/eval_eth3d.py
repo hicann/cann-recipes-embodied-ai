@@ -9,7 +9,6 @@ import os
 import sys
 import os.path as osp
 import logging
-from dataclasses import dataclass
 
 from tqdm import tqdm
 
@@ -28,7 +27,7 @@ from vggt.models.vggt import VGGT
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.geometry import unproject_depth_map_to_point_map
 from vggt.utils.cast_weight import cast_model_weight
-from general_utils import fix_random_seed, get_point_map_estimation_opts
+from general_utils import fix_random_seed, get_point_map_estimation_opts, sync_and_get_time, SPConfig, setup_distributed
 from perf_metric import calc_performance
 from utils import transfer_data_between_devices, \
     denormalize_image, extract_pts3d, projection_alignment, get_pcd, write_pcd
@@ -36,61 +35,14 @@ from utils import transfer_data_between_devices, \
 logging.basicConfig(level=logging.INFO)
 
 
-@dataclass
-class SPConfig:
-    """Sequence Parallel Configuration"""
-    ulysses_degree: int = 1
-    ring_degree: int = 1
-    use_ring_overlap: bool = True
-    
-    @property
-    def sp_degree(self):
-        return self.ulysses_degree * self.ring_degree
-
-
-def setup_distributed(args):
-    """Initialize distributed environment"""
-    if not dist.is_initialized():
-        dist.init_process_group(backend='hccl')
-    
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
-    
-    if args.ulysses_degree * args.ring_degree != world_size:
-        raise ValueError(
-            f"ulysses_degree ({args.ulysses_degree}) * ring_degree ({args.ring_degree}) "
-            f"must equal world_size ({world_size})"
-        )
-    
-    ulysses_pg = None
-    ring_pg = None
-    global_pg = None
-    
-    global_pg = dist.new_group(ranks=list(range(world_size)))
-    
-    if args.ulysses_degree > 1:
-        for i in range(args.ring_degree):
-            start_rank = i * args.ulysses_degree
-            ranks = list(range(start_rank, start_rank + args.ulysses_degree))
-            group = dist.new_group(ranks=ranks)
-            if rank in ranks:
-                ulysses_pg = group
-    
-    if args.ring_degree > 1:
-        for i in range(args.ulysses_degree):
-            ranks = list(range(i, world_size, args.ulysses_degree))
-            group = dist.new_group(ranks=ranks)
-            if rank in ranks:
-                ring_pg = group
-    
-    return rank, world_size, ulysses_pg, ring_pg, global_pg
-
-
 def model_inference(model, data, dtype, use_proj):
     with torch.cuda.amp.autocast(dtype=dtype):
         with torch.no_grad():
             images = torch.stack([view['img'] for view in data], dim=0).permute(1, 0, 2, 3, 4)
+            num_images = images.shape[0] * images.shape[1]
+            start_time = sync_and_get_time()
             predictions = model(images)
+            exec_time = sync_and_get_time(start_time, log_result=True, num_images=num_images)
 
             batch_size, seq_len = images.shape[:2]
             ress = []
@@ -119,8 +71,8 @@ def model_inference(model, data, dtype, use_proj):
                 point_map_by_unprojection = unproject_depth_map_to_point_map(depth_map.squeeze(0),
                                                                                 extrinsic.squeeze(0),
                                                                                 intrinsic.squeeze(0))
-                return preds, data, depth_conf, point_map_by_unprojection
-            return preds, data, None, None
+                return preds, data, depth_conf, point_map_by_unprojection, exec_time
+            return preds, data, None, None, exec_time
 
 
 def main(model, dataset, device, args, dtype):
@@ -134,14 +86,16 @@ def main(model, dataset, device, args, dtype):
         comp_all = 0
         nc1_all = 0
         nc2_all = 0
+        exec_time_list = []
 
         for data_idx in tqdm(range(len(dataset))):
             batch = default_collate([dataset[data_idx]])
             scene_id = batch[0]['label'][0].rsplit("/", 1)[0]
             transfer_data_between_devices(batch, "input", device)
             denormalize_image(batch, dtype)
-            preds, batch, depth_conf, point_map_by_unprojection = \
+            preds, batch, depth_conf, point_map_by_unprojection, exec_time = \
                 model_inference(model, batch, dtype, args.use_proj)
+            exec_time_list.append(exec_time)
             logging.info(f"Evaluation for {name_data} {data_idx+1}/{len(dataset)}")
 
             transfer_data_between_devices(batch, "input", "cpu")
@@ -175,6 +129,11 @@ def main(model, dataset, device, args, dtype):
         overall_mean = (acc_mean + comp_mean) / 2
         logging.info(f"Final Results--Accuracy:{acc_mean} | "
                     f"Completeness: {comp_mean} | Overall: {overall_mean}")
+
+        if exec_time_list:
+            avg_time = sum(exec_time_list) / len(exec_time_list)
+            logging.info(f"Execution times (ms): {[t*1000 for t in exec_time_list]}")
+            logging.info(f"Average inference time: {avg_time*1000:.2f} ms ({avg_time:.4f} s)")
         
 
 if __name__ == "__main__":

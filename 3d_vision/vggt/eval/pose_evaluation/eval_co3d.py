@@ -12,7 +12,6 @@ import os
 import gc
 import random
 import logging
-from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -26,7 +25,7 @@ from vggt.models.vggt import VGGT
 from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.cast_weight import cast_model_weight
-from general_utils import fix_random_seed, get_pose_evaluation_opts
+from general_utils import fix_random_seed, get_pose_evaluation_opts, sync_and_get_time, SPConfig, setup_distributed
 from dataset_prepare.categories import SEEN_CATEGORIES
 from utils import convert_pt3d_rt_to_opencv, calculate_auc_np, \
     se3_to_relative_pose_error, load_annotation, list_per_category_downloaded_seq_names
@@ -36,63 +35,16 @@ from quant.vggt_linear import LinearW8A8
 logging.basicConfig(level=logging.INFO)
 
 
-@dataclass
-class SPConfig:
-    """Sequence Parallel Configuration"""
-    ulysses_degree: int = 1
-    ring_degree: int = 1
-    use_ring_overlap: bool = True
-    
-    @property
-    def sp_degree(self):
-        return self.ulysses_degree * self.ring_degree
-
-
-def setup_distributed(args):
-    """Initialize distributed environment"""
-    if not dist.is_initialized():
-        dist.init_process_group(backend='hccl')
-    
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
-    
-    if args.ulysses_degree * args.ring_degree != world_size:
-        raise ValueError(
-            f"ulysses_degree ({args.ulysses_degree}) * ring_degree ({args.ring_degree}) "
-            f"must equal world_size ({world_size})"
-        )
-    
-    ulysses_pg = None
-    ring_pg = None
-    global_pg = None
-    
-    global_pg = dist.new_group(ranks=list(range(world_size)))
-    
-    if args.ulysses_degree > 1:
-        for i in range(args.ring_degree):
-            start_rank = i * args.ulysses_degree
-            ranks = list(range(start_rank, start_rank + args.ulysses_degree))
-            group = dist.new_group(ranks=ranks)
-            if rank in ranks:
-                ulysses_pg = group
-    
-    if args.ring_degree > 1:
-        for i in range(args.ulysses_degree):
-            ranks = list(range(i, world_size, args.ulysses_degree))
-            group = dist.new_group(ranks=ranks)
-            if rank in ranks:
-                ring_pg = group
-    
-    return rank, world_size, ulysses_pg, ring_pg, global_pg
-
-
 def model_inference(model, images, dtype):
     """Inference function"""
     with torch.no_grad():
         with torch.cuda.amp.autocast(dtype=dtype):
             imgs = torch.unsqueeze(images, 0)  # B S C H W
-            
+
+            num_images = imgs.shape[0] * imgs.shape[1]
+            start_time = sync_and_get_time()
             predictions = model(imgs)
+            exec_time = sync_and_get_time(start_time, log_result=True, num_images=num_images)
             
             batch_size, seq_len = imgs.shape[:2]
             ress = []
@@ -104,7 +56,7 @@ def model_inference(model, images, dtype):
         pose_enc = torch.stack([predictions[s]['camara_pose'].to("cpu") for s in range(len(predictions))], dim=1)
         extrinsic, intrinsic = pose_encoding_to_extri_intri(pose_enc, imgs.shape[-2:])
         pred_extrinsic = extrinsic[0]
-    return pred_extrinsic
+    return pred_extrinsic, exec_time
 
 
 def get_testing_sequences(co3d_anno_dir, co3d_dir, category):
@@ -147,13 +99,13 @@ def process_sequence(model, seq_data, args, device, dtype):
     num_frames = args.num_frames
 
     if len(seq_data) < min_num_images:
-        return None, None
+        return None, None, None
 
     metadata = []
     for data in seq_data:
         # Make sure translations are not ridiculous
         if data["T"][0] + data["T"][1] + data["T"][2] > 1e5:
-            return None, None
+            return None, None, None
         extri_opencv = convert_pt3d_rt_to_opencv(data["R"], data["T"])
         metadata.append({
             "filepath": data["filepath"],
@@ -169,7 +121,7 @@ def process_sequence(model, seq_data, args, device, dtype):
 
     images = load_and_preprocess_images(image_names).to(device)
     
-    pred_extrinsic = model_inference(model, images, dtype)
+    pred_extrinsic, exec_time = model_inference(model, images, dtype)
     
     gt_extrinsic = torch.from_numpy(gt_extri)
     pred_extrinsic = pred_extrinsic.detach().cpu()
@@ -181,13 +133,14 @@ def process_sequence(model, seq_data, args, device, dtype):
   
     rel_rangle_deg, rel_tangle_deg = se3_to_relative_pose_error(pred_se3, gt_se3, num_frames)
 
-    return rel_rangle_deg.cpu().numpy(), rel_tangle_deg.cpu().numpy()
+    return rel_rangle_deg.cpu().numpy(), rel_tangle_deg.cpu().numpy(), exec_time
 
 
 def process_category_sequences(model, device, args, category, dtype):
     """Process all sequences for a category"""
     r_error = []
     t_error = []
+    time_list = []
 
     seq = get_testing_sequences(args.co3d_anno_dir, args.co3d_dir, category)
 
@@ -198,13 +151,14 @@ def process_category_sequences(model, device, args, category, dtype):
             logging.warning(f"Skip Processing {seq_name} as it does not exist in the dataset")
             continue
 
-        seq_r_error, seq_t_error = process_sequence(model, seq_data, args, device, dtype)
+        seq_r_error, seq_t_error, seq_time = process_sequence(model, seq_data, args, device, dtype)
 
         if seq_r_error is not None and seq_t_error is not None:
             r_error.extend(seq_r_error)
             t_error.extend(seq_t_error)
+            time_list.append(seq_time)
 
-    return r_error, t_error
+    return r_error, t_error, time_list
 
 
 def main(model, device, args, dtype, categories):
@@ -214,9 +168,11 @@ def main(model, device, args, dtype, categories):
         categories = ["apple"]
 
     per_category_results = {}
+    all_times = []
 
     for category in categories:
-        r_error, t_error = process_category_sequences(model, device, args, category, dtype)
+        r_error, t_error, cat_time_list = process_category_sequences(model, device, args, category, dtype)
+        all_times.extend(cat_time_list)
         if not r_error:
             logging.warning(f"No valid sequences available for {category}, skip processing")
             continue
@@ -252,6 +208,11 @@ def main(model, device, args, dtype, categories):
     if per_category_results:
         mean_auc_30 = np.mean([per_category_results[category]["Auc_30"] for category in per_category_results])
         logging.info(f"Mean AUC: {mean_auc_30:.4f} (AUC@30)")
+
+    if all_times:
+        avg_time = sum(all_times) / len(all_times)
+        logging.info(f"Execution times (ms): {[t*1000 for t in all_times]}")
+        logging.info(f"Average inference time: {avg_time*1000:.2f} ms ({avg_time:.4f} s)")
 
 
 if __name__ == "__main__":
