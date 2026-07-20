@@ -44,7 +44,7 @@ Spirit v1.5是由千寻智能自研的具身智能模型，在2026.1.12的RoboCh
 
 本样例的执行依赖CANN开发套件包（cann-toolkit）与CANN二进制算子包（cann-kernels），支持的CANN软件版本为`CANN 8.3.RC1`。
 
-请从[软件包下载地址](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.3.RC1)下载`Ascend-cann-toolkit_8.3.RC1_linux-${arch}.run`与`Atlas-cann-kernels_310p_8.3.RC1_linux-${arch}.run`，并参考[CANN安装文档](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1/softwareinst/instg/instg_quick.html?Mode=PmIns&InstallType=netconda&OS=openEuler&Software=cannToolKit)进行安装。
+请从[软件包下载地址](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.3.RC1)下载`Ascend-cann-toolkit_8.3.RC1_linux-${arch}.run`与`Ascend-cann-kernels_310p_8.3.RC1_linux-${arch}.run`，并参考[CANN安装文档](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1/softwareinst/instg/instg_quick.html?Mode=PmIns&InstallType=netconda&OS=openEuler&Software=cannToolKit)进行安装。
 
 - `${arch}`表示CPU架构，根据host机器的架构选择aarch64或x86_64。
 
