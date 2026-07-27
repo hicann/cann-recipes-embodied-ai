@@ -31,7 +31,8 @@ pip install -U huggingface_hub
 export HF_ENDPOINT=https://hf-mirror.com
 
 if [ ! -f "${OFFICIAL_VGGT_DIR}/model.pt" ]; then
-    hf download facebook/VGGT-1B --local-dir "${OFFICIAL_VGGT_DIR}"
+    # 'model.pt' required: without it, snapshot_download forces Xet/CAS protocol, incompatible with hf-mirror.com (401 Unauthorized).
+    hf download facebook/VGGT-1B model.pt --local-dir "${OFFICIAL_VGGT_DIR}"
 else
     echo "[Skip] ${OFFICIAL_VGGT_DIR}/model.pt already exists"
 fi
