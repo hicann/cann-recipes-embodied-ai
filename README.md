@@ -162,9 +162,9 @@ flowchart TB
 | 量化 | ≥1B 参数的大模型推理 | [VGGT](3d_vision/vggt/README.md)（W8A8，`--buildW8A8` / `--enableW8A8`） |
 
 
-## 🏃 一站式平台快速体验
+## 🏃 CANNLab一站式开发平台快速体验
 
-「一站式平台」是为开发者提供的 NPU 环境，内部已集成完整的 CANN 环境，可以直接使用。cann-recipes-embodied-ai 针对该平台在相应样例 README 中提供了简化的「快速启动」路径，帮助用户最小步骤完成 NPU 推理体验。当前支持的模型正在持续扩展中，敬请关注：
+「CANNLab一站式开发平台」是为开发者提供的 NPU 环境，内部已集成完整的 CANN 环境，可以直接使用。cann-recipes-embodied-ai 针对该平台在相应样例 README 中提供了简化的「快速启动」路径，帮助用户最小步骤完成 NPU 推理体验。当前支持的模型正在持续扩展中，敬请关注：
 
 |实践|简介|
 |-----|-----|
