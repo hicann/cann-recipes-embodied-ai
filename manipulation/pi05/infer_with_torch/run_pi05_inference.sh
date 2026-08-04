@@ -35,17 +35,16 @@ echo "Warmup: $WARMUP"
 echo "Iterations: $ITERS"
 echo "Device: $DEVICE"
 
-# 运行 Python 示例脚本
-python run_pi05_example.py \
+# 运行 Python 示例脚本并保留真实退出状态
+if python run_pi05_example.py \
     --pretrained_model_name_or_path "$CHECKPOINT" \
     --device "$DEVICE" \
     --dtype "$DTYPE" \
     --num_warmup "$WARMUP" \
-    --num_inference "$ITERS"
-
-# 检查脚本运行结果
-if [ $? -eq 0 ]; then
+    --num_inference "$ITERS"; then
     echo "脚本成功运行!"
 else
+    status=$?
     echo "脚本运行失败!"
+    exit "$status"
 fi

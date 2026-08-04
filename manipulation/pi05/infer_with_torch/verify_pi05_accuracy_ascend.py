@@ -22,7 +22,11 @@ from lerobot.policies.pi05.modeling_pi05 import PI05Policy
 from infer_utils import get_device, make_dummy_observation, move_to_device, synchronize
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    force=True,
+)
 logger = logging.getLogger(__name__)
 
 try:

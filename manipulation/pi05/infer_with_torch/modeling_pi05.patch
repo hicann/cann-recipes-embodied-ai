@@ -21,9 +21,11 @@ index 11d8b4d6..78318aeb 100644
  
      # Compute the outer product
      scaling_factor = 1.0 / period * 2 * math.pi
-@@ -615,21 +620,27 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
+@@ -615,21 +620,28 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
          att_2d_masks_4d = att_2d_masks[:, None, :, :]
-         return torch.where(att_2d_masks_4d, 0.0, OPENPI_ATTENTION_MASK_VALUE)
+-        return torch.where(att_2d_masks_4d, 0.0, OPENPI_ATTENTION_MASK_VALUE)
++        dtype = self._inference_dtype()
++        return torch.where(att_2d_masks_4d, 0.0, torch.finfo(dtype).min)
  
 +    def _inference_dtype(self) -> torch.dtype:
 +        """Return runtime dtype following model parameters."""

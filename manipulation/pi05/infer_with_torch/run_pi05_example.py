@@ -23,7 +23,11 @@ from lerobot.policies.pi05.modeling_pi05 import PI05Policy
 from infer_utils import get_device, make_dummy_observation, move_to_device_and_dtype, synchronize
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    force=True,
+)
 logger = logging.getLogger(__name__)
 
 try:
@@ -179,7 +183,7 @@ def main():
         dtype = resolve_dtype(args.dtype)
     except ValueError as exc:
         logger.error(str(exc))
-        return
+        raise SystemExit(2) from exc
 
     logger.info("Using device: %s", device)
     logger.info("Using dtype: %s", dtype)
@@ -187,8 +191,8 @@ def main():
     try:
         policy = load_policy(args.pretrained_model_name_or_path, device, dtype)
     except Exception as load_err:
-        logger.error("Failed to load model: %s", load_err)
-        return
+        logger.exception("Failed to load model: %s", load_err)
+        raise SystemExit(1) from load_err
 
     preprocess, postprocess = make_pre_post_processors(policy.config)
     runtime_env = RuntimeEnv(device=device, dtype=dtype)

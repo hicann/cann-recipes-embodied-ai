@@ -27,7 +27,7 @@ chmod +x cann-recipes-embodied-ai/manipulation/pi05/infer_with_torch/download_co
 <br>
 
 
-## pi0.5在昇腾310P上的运行环境配置
+## pi0.5在昇腾上的运行环境配置
 ### 与昇腾服务器无关的环境配置
 ```bash
 # 创建运行环境
@@ -39,27 +39,32 @@ cd lerobot
 pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
 pip install -e .
 pip install "transformers @ git+https://github.com/huggingface/transformers.git@fix/lerobot_openpi"
+pip install numpy==1.26.4
 ```
 
 ### 与昇腾平台相关的环境配置
-安装CANN软件包。本样例的编译执行依赖CANN开发套件包（cann-toolkit）与CANN二进制算子包（cann-kernels），支持的CANN软件版本为`CANN 8.2.RC1`。
-请从[软件包下载地址](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1)下载`Ascend-cann-toolkit_8.2.RC1_linux-x86_64.run`与`Ascend-cann-kernels-310p_8.2.RC1_linux-x86_64.run`软件包，并参考[CANN安装文档](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1/softwareinst/instg/instg_quick.html?Mode=PmIns&InstallType=local&OS=Debian&Software=cannToolKit)依次进行安装。
+1. 安装CANN软件包。
 
-```bash
-# ${cann_install_path}为CANN包的实际安装目录，注意每次新建终端时，首先source一下set_env.sh。
-# 方式1：默认路径安装，以root用户为例
-source /usr/local/Ascend/ascend-toolkit/set_env.sh
+  本样例的编译执行依赖CANN开发套件包（toolkit）与CANN二进制算子包（kernels/ops）。
 
-# 方式2：指定路径进行安装
-source ${cann_install_path}/ascend-toolkit/set_env.sh
+  310P请从[软件包下载地址](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.2.RC1)下载`Ascend-cann-toolkit_8.2.RC1_linux-${arch}.run`与`Ascend-cann-kernels-310p_8.2.RC1_linux-${arch}.run`软件包，并参考[CANN安装文档](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/82RC1/softwareinst/instg/instg_quick.html?Mode=PmIns&InstallType=local&OS=Debian&Software=cannToolKit)依次进行安装。
 
-# 在上述运行环境中继续安装对应版本torch-npu
-pip install numpy==1.26.4
-pip install torch_npu-2.5.1.post1
-wget https://gitcode.com/Ascend/pytorch/releases/download/v7.1.0-pytorch2.5.1/torch_npu-2.5.1.post1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-pip install torch_npu-2.5.1.post1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-```
+  A2请从[软件包下载地址](https://www.hiascend.com/developer/download/community/result?module=cann&cann=9.0.0)下载`Ascend-cann-toolkit_9.0.0_linux-${arch}.run`与`Ascend-cann-910b-ops_9.0.0_linux-${arch}.run`软件包，并参考[CANN安装文档](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/90RC1/softwareinst/instg/instg_quick.html?Mode=PmIns&InstallType=local&OS=Debian&Software=cannToolKit)依次进行安装。
 
+  - `${arch}`表示服务器CPU架构，ARM架构对应`aarch64`，x86架构对应`x86_64`。可通过`uname -m`查询当前服务器的CPU架构，并下载与之匹配的软件包。
+
+  ```bash
+  # ${cann_install_path}为CANN包的实际安装目录，注意每次新建终端时，首先source一下set_env.sh。
+  # 方式1：默认路径安装，以root用户为例
+  source /usr/local/Ascend/ascend-toolkit/set_env.sh
+
+  # 方式2：指定路径进行安装
+  source ${cann_install_path}/ascend-toolkit/set_env.sh
+  ```
+2. 安装Ascend Extension for PyTorch（torch_npu）。
+
+  Ascend Extension for PyTorch（torch_npu）为支撑PyTorch框架运行在NPU上的适配插件，本样例支持的Ascend Extension for PyTorch版本为`7.1.0`，PyTorch版本为`2.5.1`。
+  请根据服务器CPU架构下载对应的[x86_64安装包](https://gitee.com/ascend/pytorch/releases/download/v7.1.0-pytorch2.5.1/torch_npu-2.5.1.post1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl)或[aarch64安装包](https://gitee.com/ascend/pytorch/releases/download/v7.1.0-pytorch2.5.1/torch_npu-2.5.1.post1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl)，参考[torch_npu安装文档](https://www.hiascend.com/document/detail/zh/Pytorch/710/configandinstg/instg/insg_0004.html)进行安装。
 <br>
 
 
