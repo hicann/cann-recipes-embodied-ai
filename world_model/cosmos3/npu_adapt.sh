@@ -168,6 +168,25 @@ adapt_common_inference() {
     info "Adapted distributed error flag device in $file"
 }
 
+adapt_distributed_runtime() {
+    local file
+    file="$(file_path "cosmos_framework/utils/distributed.py")"
+    ensure_file "$file" || return 0
+
+    sed -i 's|^import pynvml$|try:\n    import pynvml\nexcept ImportError:\n    pynvml = None|' "$file"
+    sed -z -i 's|    if dist\.is_initialized():\n        return torch\.cuda\.current_device()|    if dist.is_initialized():\n        return torch.npu.current_device()|' "$file"
+    sed -z -i 's|    # Set GPU affinity\.\n    pynvml\.nvmlInit()\n    local_rank = int(os\.getenv("LOCAL_RANK", 0))\n    try:\n        device = Device(local_rank)\n        os\.sched_setaffinity(0, device\.get_cpu_affinity())\n    except pynvml\.NVMLError as e:\n        log\.warning(f"Failed to set device affinity: {e}")|    # Set GPU affinity when NVML is available.\n    local_rank = int(os.getenv("LOCAL_RANK", 0))\n    if pynvml is not None:\n        try:\n            pynvml.nvmlInit()\n            device = Device(local_rank)\n            os.sched_setaffinity(0, device.get_cpu_affinity())\n        except pynvml.NVMLError as e:\n            log.warning(f"Failed to set device affinity: {e}")|' "$file"
+
+    sed -i 's|# Set up NCCL communication\.|# Set up HCCL communication.|' "$file"
+    sed -i 's|torch\.cuda\.set_device(local_rank)|torch.npu.set_device(local_rank)|' "$file"
+    sed -i 's|dist\.init_process_group(backend="nccl"|dist.init_process_group(backend="hccl"|' "$file"
+    sed -i 's|Initialized distributed training|Initialized distributed runtime|' "$file"
+    sed -i 's|Training with {get_world_size()} GPUs\.|Running with {get_world_size()} NPUs.|' "$file"
+    sed -i 's|return torch\.cuda\.current_device() == 0|return torch.npu.current_device() == 0|' "$file"
+
+    info "Adapted distributed runtime to HCCL/NPU in $file"
+}
+
 adapt_inference_runtime() {
     local file
     file="$(file_path "cosmos_framework/inference/inference.py")"
@@ -181,6 +200,7 @@ adapt_inference_runtime() {
     sed -i 's|torch.cuda.Event()|torch.npu.Event()|' "$file"
     sed -i 's|torch.cuda.current_stream|torch.npu.current_stream|g' "$file"
     sed -i 's|torch.cuda.stream|torch.npu.stream|' "$file"
+    sed -i 's|count_tensor = torch.tensor(\[num_local_batches\], dtype=torch.long, device="cuda")|count_tensor = torch.tensor([num_local_batches], dtype=torch.long, device="npu")|' "$file"
     info "Adapted inference runtime CUDA APIs to NPU in $file"
 }
 
@@ -293,10 +313,16 @@ apply_inference_local_checkpoint_patch() {
     info "Applied local checkpoint resource loading patch"
 }
 
-remove_nvml_imports() {
-    delete_line_matching "$(file_path "cosmos_framework/utils/device.py")" '^import pynvml$'
-    delete_line_matching "$(file_path "cosmos_framework/utils/distributed.py")" '^import pynvml$'
-    info "Removed pynvml imports from simple utility modules"
+adapt_optional_nvml() {
+    local file
+    file="$(file_path "cosmos_framework/utils/device.py")"
+    ensure_file "$file" || return 0
+
+    sed -i 's|^import pynvml$|try:\n    import pynvml\nexcept ImportError:\n    pynvml = None|' "$file"
+    sed -i 's|except pynvml.NVMLError as error:|except Exception as error:|g' "$file"
+    sed -z -i 's|finally:\n        pynvml\.nvmlShutdown()|finally:\n        if pynvml is not None:\n            pynvml.nvmlShutdown()|' "$file"
+
+    info "Made pynvml optional in device utilities"
 }
 
 main() {
@@ -309,6 +335,7 @@ main() {
     adapt_compile_defaults
     adapt_common_init
     adapt_common_inference
+    adapt_distributed_runtime
     adapt_inference_runtime
     adapt_transfer_and_vision_inputs
     adapt_sequence_packing_device_move
@@ -316,7 +343,7 @@ main() {
     adapt_moe_triton_import_guard
     adapt_attention_cann_registration
     apply_inference_local_checkpoint_patch
-    remove_nvml_imports
+    adapt_optional_nvml
 
     info "Simple NPU adaptation completed."
 }

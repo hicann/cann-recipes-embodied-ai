@@ -167,6 +167,66 @@ torchrun --nproc-per-node=${COSMOS_NPUS} -m cosmos_framework.scripts.inference \
     --no-guardrails
 ```
 
+### 多卡并行
+
+当前适配支持 CP、CFGP 和 FSDP 多卡推理。运行前请将 `COSMOS_NPUS` 设置为实际使用的 NPU 数量，并保证各并行度与进程数匹配。
+
+| 并行方式 | 主要参数 | 适用目的与约束 |
+| --- | --- | --- |
+| CP（Context Parallel） | `--cp-size` | 沿 token 序列切分 Attention 计算，适合长序列并降低激活显存；当前 CP 范围为 1～32 |
+| CFGP（Classifier-Free Guidance Parallel） | `--cfgp-size` | 将有条件与无条件 CFG 分支分配到不同设备；CFGP 仅支持 1 或 2，更大规模可与 CP/FSDP 组合 |
+| FSDP | `--dp-shard-size` | 按进程数切分模型参数，优先降低单卡权重显存 |
+
+FSDP 的 DP 通信组与 CP/CFGP 通信组相互独立，通信域大小满足：
+
+```text
+dp-shard-size × dp-replicate-size = WORLD_SIZE
+WORLD_SIZE % (cp-size × cfgp-size) = 0
+```
+
+
+CP：
+
+```bash
+torchrun --nproc-per-node=${COSMOS_NPUS} -m cosmos_framework.scripts.inference \
+    --parallelism-preset=throughput \
+    --dp-shard-size=1 --cp-size=${COSMOS_NPUS} --cfgp-size=1 \
+    -i inputs/omni/t2v.json \
+    -o outputs/t2v_cp \
+    --checkpoint-path ${COSMOS_CHECKPOINT} \
+    --resolution=${COSMOS_RESOLUTION} \
+    --seed=${COSMOS_SEED} \
+    --no-guardrails
+```
+
+CFGP（单独启用时设置 `COSMOS_NPUS=2`）：
+
+```bash
+torchrun --nproc-per-node=${COSMOS_NPUS} -m cosmos_framework.scripts.inference \
+    --parallelism-preset=throughput \
+    --dp-shard-size=1 --cp-size=1 --cfgp-size=2 \
+    -i inputs/omni/t2v.json \
+    -o outputs/t2v_cfgp \
+    --checkpoint-path ${COSMOS_CHECKPOINT} \
+    --resolution=${COSMOS_RESOLUTION} \
+    --seed=${COSMOS_SEED} \
+    --no-guardrails
+```
+
+FSDP：
+
+```bash
+torchrun --nproc-per-node=${COSMOS_NPUS} -m cosmos_framework.scripts.inference \
+    --parallelism-preset=throughput \
+    --dp-shard-size=${COSMOS_NPUS} --cp-size=1 --cfgp-size=1 \
+    -i inputs/omni/t2v.json \
+    -o outputs/t2v_fsdp \
+    --checkpoint-path ${COSMOS_CHECKPOINT} \
+    --resolution=${COSMOS_RESOLUTION} \
+    --seed=${COSMOS_SEED} \
+    --no-guardrails
+```
+
 
 ## 样例输出展示
 
