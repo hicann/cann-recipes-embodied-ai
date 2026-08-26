@@ -262,7 +262,7 @@ dp_model_migrated/
 ```
 
 说明：
-- [diffusion-policy/infer_with_om/eval_dp_ascend.py](diffusion-policy/infer_with_om/eval_dp_ascend.py) 会优先在 `--policy.path` 指向的目录查找 processors；如果没有，会自动尝试同级的 `<policy_dir>_migrated/`。
+- [eval_dp_ascend.py](eval_dp_ascend.py) 会优先在 `--policy.path` 指向的目录查找 processors；如果没有，会自动尝试同级的 `<policy_dir>_migrated/`。
 - 也可以直接把 `--policy.path` 指向 `dp_model_migrated/`（前提是该目录包含 `config.json`）。
 
 

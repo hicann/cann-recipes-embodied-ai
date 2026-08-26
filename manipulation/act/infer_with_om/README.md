@@ -187,7 +187,7 @@ atc --model=outputs/onnx/act.onnx \
 可参考：[ACLLite安装教程](https://gitee.com/ascend/ACLLite#%E5%AE%89%E8%A3%85%E6%95%99%E7%A8%8B)
 
 ```bash
-python3 act/eval_act_ascend.py \
+python3 eval_act_ascend.py \
     --policy.path=act_model \
     --om_model_path=outputs/om/act.om \
     --env.type=aloha \
@@ -225,7 +225,7 @@ python3 act/verify_om_onnx.py \
 使用Aloha数据集在NPU进行推理，在Host CPU上进行仿真渲染:
 
 ```bash
-python3 act/eval_act_ascend.py \
+python3 eval_act_ascend.py \
     --policy.path=act_model \
     --om_model_path=outputs/om/act.om \
     --env.type=aloha \
@@ -271,7 +271,7 @@ act_model_migrated/
 ```
 
 说明：
-- [act/eval_act_ascend.py](act/eval_act_ascend.py) 会优先在 `--policy.path` 指向的目录查找 processors；如果没有，会自动尝试同级的 `<policy_dir>_migrated/`。
+- [eval_act_ascend.py](eval_act_ascend.py) 会优先在 `--policy.path` 指向的目录查找 processors；如果没有，会自动尝试同级的 `<policy_dir>_migrated/`。
 - 也可以直接把 `--policy.path` 指向 `act_model_migrated/`（前提是该目录包含 `config.json`）。
 
 

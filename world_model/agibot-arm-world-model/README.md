@@ -131,6 +131,6 @@ Not included:
 1. Prepare an Ascend runtime environment and a conda environment with the required Python packages.
 2. Clone and install the official `DiffSynth-Studio`.
 3. Prepare model weights and the AgiBotWorld-format dataset.
-4. Follow [train/README.md](train/README.md) for training.
-5. Follow [infer_with_torch/README.md](infer_with_torch/README.md) for inference.
+4. Follow [doc/train.md](doc/train.md) for training.
+5. Follow [doc/inference.md](doc/inference.md) for inference.
 6. See [doc/optimization.md](doc/optimization.md) for the design and optimization rationale of this sample.
