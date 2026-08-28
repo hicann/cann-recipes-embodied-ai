@@ -197,6 +197,10 @@ if [ -n "$CUSTOM_CONFIG" ]; then
     fi
     echo "Using custom config: $CONFIG_PATH"
 elif [ -n "$MODEL_TYPE" ]; then
+    if [[ "$MODEL_TYPE" != "pi05" ]]; then
+        echo "Error: Unsupported model type '$MODEL_TYPE'. Only 'pi05' is supported; use --config <path> for a custom config."
+        exit 1
+    fi
     CONFIG_PATH="$PROJECT_ROOT/src/lerobot/configs/${MODEL_TYPE}.yaml"
     if [ ! -f "$CONFIG_PATH" ]; then
         echo "Error: Config file not found for model '$MODEL_TYPE': $CONFIG_PATH"

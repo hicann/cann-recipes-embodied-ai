@@ -161,9 +161,9 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: $0 [--config <path>] [--lerobot-dir <path>] [<model_type>] [--nproc <num>] [--port <port>] [--resume] [--foreground] [--gc|--disable-gc] [--disable-outer-suffix-checkpoint] [--mix [fp16|bf16|fp8]]"
             echo "Example:"
-            echo "  ./run_train.sh pi0"
-            echo "  ./run_train.sh smolvla --resume"
-            echo "  ./run_train.sh smolvla --mix fp16"
+            echo "  ./run_train.sh pi05"
+            echo "  ./run_train.sh pi05 --resume"
+            echo "  ./run_train.sh pi05 --mix fp16"
             echo "  ./run_train.sh --config configs/custom.yaml --mix bf16"
             echo "  ./run_train.sh pi05 --lerobot-dir /path/to/lerobot-v044"
             echo "  ./run_train.sh pi05 --nproc 1 --foreground"
@@ -199,6 +199,10 @@ if [ -n "$CUSTOM_CONFIG" ]; then
     fi
     echo "Using custom config: $CONFIG_PATH"
 elif [ -n "$MODEL_TYPE" ]; then
+    if [[ "$MODEL_TYPE" != "pi05" ]]; then
+        echo "Error: Unsupported model type '$MODEL_TYPE'. Only 'pi05' is supported; use --config <path> for a custom config."
+        exit 1
+    fi
     CONFIG_PATH="$PROJECT_ROOT/src/lerobot/configs/${MODEL_TYPE}.yaml"
     if [ ! -f "$CONFIG_PATH" ]; then
         echo "Error: Config file not found for model '$MODEL_TYPE': $CONFIG_PATH"
