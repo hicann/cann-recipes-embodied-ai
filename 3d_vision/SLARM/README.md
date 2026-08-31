@@ -53,7 +53,7 @@ SLARM在动态估计、渲染质量、场景解析等多项任务上达到**SOTA
 **Waymo数据集**
 - 准备Waymo Open Dataset【全量数据集，也可使用我们提供的demo数据快速实现】，请参考[Waymo数据说明](docs/WAYMO.md)。
 
-- 我们提供了SLARM的权重和demo数据集，用户可以以下链接获取：[权重和demo数据集](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-intelligence/SLARM/SLARM.zip)。
+- 我们提供了SLARM的权重和demo数据集，用户可以以下链接获取：[权重和demo数据集](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-ai/SLARM/SLARM.zip)。
 
 ## 执行推理
 本项目已将推理所需的NPU环境变量、性能优化配置及模型参数封装在 `inference.sh` 、`evaluation.sh` 脚本中。使用我们提供的样例数据集与脚本默认配置，直接执行如下命令即可完成推理：

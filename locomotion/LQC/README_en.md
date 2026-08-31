@@ -6,7 +6,7 @@ The Learning-based Quadruped Robot Controller (LQC) is a reinforcement learning 
 ## Environment Setup
 
 ### Pull the Docker Image
-Download the Docker image from the [ARM image repository](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-intelligence/lqc-image.tar) and upload it to the Ascend A2 server. Import the image with the following command:
+Download the Docker image from the [ARM image repository](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-ai/lqc-image/lqc-image.tar) and upload it to the Ascend A2 server. Import the image with the following command:
 ```
 docker load -i lqc-image.tar
 ```
@@ -102,7 +102,7 @@ python -c "from lltk import registry; print(registry.list_envs())"
 ```
 
 ### Model Assets Preparation
-Before starting training, you need to prepare 3D model files for MuJoCo to load. This sample provides physics model files for various robots including Unitree G1 and GO2 with different degrees of freedom. [Download the assets](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-intelligence/LQC/resources.tar) and extract them into the `./resources` folder.
+Before starting training, you need to prepare 3D model files for MuJoCo to load. This sample provides physics model files for various robots including Unitree G1 and GO2 with different degrees of freedom. [Download the assets](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-ai/resources/resources.tar) and extract them into the `./resources` folder.
 
 ## Single‑Card Training
 
@@ -169,7 +169,7 @@ For more options, see:
 python scripts/play.py -h
 ```
 
-We also provide pre‑trained weights for Unitree G1 for quick validation. [Download the weight](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-intelligence/LQC-G1-15DOF-Rough/G1_15DOF_rough.tar) and extract them into the /logs/g1_15dof.rough folder.
+We also provide pre‑trained weights for Unitree G1 for quick validation. [Download the weight](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-ai/LQC-G1-15DOF-Rough/G1_15DOF_rough.tar) and extract them into the /logs/g1_15dof.rough folder.
 
 
 ### Online Rendering

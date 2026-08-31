@@ -6,7 +6,7 @@ Learning-based Quadruped Robot Controller (LQC) 是适用于足式机器人的�
 ## 环境准备
 
 ### 拉取镜像
-从[ARM镜像地址](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-intelligence/lqc-image.tar)中下载docker镜像，并上传到昇腾A2服务器上，通过以下命令导入镜像。
+从[ARM镜像地址](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-ai/lqc-image/lqc-image.tar)中下载docker镜像，并上传到昇腾A2服务器上，通过以下命令导入镜像。
 
 ```
 docker load -i lqc-image.tar
@@ -92,7 +92,7 @@ python -c "from lltk import registry; print(registry.list_envs())"
 ```
 
 ### 模型资产准备
-在开始训练前，需要准备三维模型文件以供MuJoCo读取，本样例提供了包括宇树G1、GO2等不同自由度的模型物理模型文件，请[下载资产](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-intelligence/LQC/resources.tar)后解压放置在`./resources`下。
+在开始训练前，需要准备三维模型文件以供MuJoCo读取，本样例提供了包括宇树G1、GO2等不同自由度的模型物理模型文件，请[下载资产](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-ai/resources/resources.tar)后解压放置在`./resources`下。
 
 ## 单卡训练
 
@@ -159,7 +159,7 @@ python scripts/play.py <RUN_DIR/WEIGHT_PATH> --command random --offline-render -
 python scripts/play.py -h
 ```
 
-本样例也基于宇树G1提供了训练好的权重供验证，可以[下载权重](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-intelligence/LQC-G1-15DOF-Rough/G1_15DOF_rough.tar)并解压到`/logs/g1_15dof.rough`文件夹后实现快速验证。
+本样例也基于宇树G1提供了训练好的权重供验证，可以[下载权重](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-ai/LQC-G1-15DOF-Rough/G1_15DOF_rough.tar)并解压到`/logs/g1_15dof.rough`文件夹后实现快速验证。
 
 ### 在线渲染
 

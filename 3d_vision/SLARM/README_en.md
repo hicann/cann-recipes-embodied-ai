@@ -53,7 +53,7 @@ This sample supports inference on the Ascend Atlas A3 environment (910C).
 **Waymo Dataset**
 - Prepare the Waymo Open Dataset [the full dataset, or you can use our provided demo data for a quick start]. Please refer to the [Waymo data guide](docs/WAYMO.md).
 
-- We provide the SLARM weights and demo dataset, which users can obtain from the following link: [weights and demo dataset](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-intelligence/SLARM/SLARM.zip).
+- We provide the SLARM weights and demo dataset, which users can obtain from the following link: [weights and demo dataset](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-ai/SLARM/SLARM.zip).
 
 ## Running Inference
 This project encapsulates the NPU environment variables, performance optimization settings, and model parameters required for inference in the `inference.sh` and `evaluation.sh` scripts. Using our provided sample dataset and the default script configuration, you can complete inference by simply running the following commands:
