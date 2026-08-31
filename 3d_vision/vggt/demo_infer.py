@@ -43,7 +43,8 @@ from utils import (
     ParallelConfigResult,
     ModelLoadConfig,
     InferenceConfig,
-    build_vggt_config
+    build_vggt_config,
+    is_ascend_950
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -305,7 +306,8 @@ def _load_model_with_sp(config: ModelLoadConfig):
     model.eval()
 
     memory_format = config.optimization.get('memory-and-data-format', {})
-    if memory_format.get('conv-weight-layout-preconvert', True):
+    # 950 only supports ND format, no need for NZ format conversion
+    if memory_format.get('conv-weight-layout-preconvert', True) and not is_ascend_950():
         model = cast_model_weight(model)
         if config.rank == 0:
             logging.info("[OPTIMIZATION] conv-weight-layout-preconvert: enabled")

@@ -25,6 +25,7 @@ from dataclasses import dataclass
 
 import yaml
 import torch
+import torch_npu
 
 from vggt.models.vggt import VGGT
 from quant.vggt_utils import replace_linear_in_vggt, set_ignore_quantize
@@ -459,7 +460,8 @@ def load_standard_model(config: StandardModelConfig):
     model.to(config.device).eval()
 
     memory_format = config.optimization.get('memory-and-data-format', {})
-    if memory_format.get('conv-weight-layout-preconvert', True):
+    # 950 only supports ND format, no need for NZ format conversion
+    if memory_format.get('conv-weight-layout-preconvert', True) and not is_ascend_950():
         model = cast_model_weight(model)
         logging.info("[OPTIMIZATION] conv-weight-layout-preconvert: enabled")
 
@@ -484,3 +486,8 @@ def build_and_save_w8a8_model(model, device):
     save_path = os.path.join(os.getcwd(), "VGGT_model_W8A8.pt")
     torch.save(model, save_path)
     logging.info(f"W8A8 model saved to {save_path}")
+
+
+def is_ascend_950() -> bool:
+    """Check whether the current NPU device is an Ascend 950 model."""
+    return "950" in torch.npu.get_device_name()

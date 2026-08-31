@@ -34,7 +34,10 @@ XFORMERS_AVAILABLE = False
 def vggt_layernorm_forward(self, x: torch.Tensor, residual: Optional[torch.Tensor] = None):
     """NPU fused Add+LayerNorm forward: single fused operator."""
     if residual is None:
-        return torch_npu.npu_layer_norm_eval(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        # torch_npu.npu_layer_norm_eval is deprecated and may be removed in future versions, use F.layer_norm instead
+        w_dtype = self.weight.dtype if self.weight is not None else x.dtype
+        x = x.to(w_dtype)
+        return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
     else:
         y, _, _, residual = torch_npu.npu_add_layer_norm(
             residual, x, self.weight, self.bias, self.eps, additional_output=True

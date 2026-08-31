@@ -247,7 +247,11 @@ class Attention(nn.Module):
         num_key_value_heads = k.shape[1]
         if num_heads == num_key_value_heads:
             num_key_value_heads = 0
-        
+
+        # 950: SDPA and npu_fused_infer_attention_score require contiguous q/k/v
+        if "950" in torch.npu.get_device_name():
+            q, k, v = q.contiguous(), k.contiguous(), v.contiguous()
+
         # FIA does not support dropout, fallback to SDPA if needed
         if params.dropout_p > 0.0 and self.training:
             logging.warning(
