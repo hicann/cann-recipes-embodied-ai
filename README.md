@@ -1,6 +1,7 @@
 # CANN Recipes for Embodied Intelligence
 
 ## 🚀 Latest News
+- [2026/08] PUMA（[DOMINO](https://github.com/H-EmbodVis/DOMINO)）动态操作 VLA 模型在昇腾 Atlas A2 上已支持[训练](manipulation/puma/train/README.md)与[在线推理](manipulation/puma/infer_with_torch/README.md)，权重可在昇腾直接加载，无需转换，样例已开源。
 - [2026/07] SLARM 前馈式动态场景重建模型在昇腾 Atlas A3 上已支持[推理](3d_vision/SLARM/README.md)，从稀疏多视角序列联合学习3D高斯与场景流，支持高斯泼溅渲染、语义分割与流式因果推理，样例已开源。
 - [2026/07] Cosmos3 世界模型在昇腾 Atlas A3 上已支持[推理](world_model/cosmos3/README.md)，覆盖 T2V、I2V、V2V 视频生成场景，样例已开源。
 - [2026/05] NMR 神经运动重定向模型在昇腾 Atlas A3 上已支持[训练和推理](locomotion/NMR)，可将人体 SMPL-X 动作重定向到 Unitree G1 人形机器人，样例已开源。
@@ -86,6 +87,9 @@ flowchart TB
 | [在线推理](manipulation/Isaac-GR00T/README.md) | Atlas A3 | 在线推理 | 通用人形机器人基础模型，适配昇腾A3平台。 | - |
 | **Spirit v1.5** | | | | |
 | [在线推理](manipulation/spirit-v1.5/infer_with_torch/README.md) | Ascend 310P | 在线推理 | 千寻智能自研的具身智能模型，RoboChallenge评测综合排名第一(截至2026.1.12)。 | - |
+| **PUMA (DOMINO)** | | | | |
+| [训练](manipulation/puma/train/README.md) | Atlas A2 | 训练 | [DOMINO](https://github.com/H-EmbodVis/DOMINO)（ECCV 2026）的动态操作 VLA 模型，8 卡 DeepSpeed ZeRO-2 训练，权重可在昇腾直接加载，无需转换。 | - |
+| [在线推理](manipulation/puma/infer_with_torch/README.md) | Atlas A2 | 在线推理 | PUMA policy server 在线推理，对接 RoboTwin 仿真评测，checkpoint 无需转换。 | - |
 
 ### 世界模型 (World Model)
 
@@ -187,9 +191,12 @@ flowchart TB
 │   │   └─gaussian_splatting                    # 3DGS相关文档
 │   ├─manipulation                              # 操作类模型文档目录
 │   │   ├─GR00T N1.6                            # Isaac-GR00T N1.6相关文档
-│   │   └─pi0                                   # Pi0相关文档
-│   │       ├─infer_with_om
-│   │       └─infer_with_torch
+│   │   ├─pi0                                   # Pi0相关文档
+│   │   │   ├─infer_with_om
+│   │   │   └─infer_with_torch
+│   │   └─puma                                  # PUMA (DOMINO)相关文档
+│   │       ├─infer_with_torch
+│   │       └─train
 │   ├─navigation                                # 导航模型文档目录
 │   │   └─alpamayo-r1                           # Alpamayo-R1相关文档
 │   └─world_model                               # 世界模型文档目录
@@ -210,6 +217,9 @@ flowchart TB
 │   │   ├─infer_with_om                         # Pi0.5模型离线推理样例
 │   │   ├─infer_with_torch                      # Pi0.5模型在线推理样例
 │   │   └─train                                 # Pi0.5模型训练样例
+│   ├─puma                                      # PUMA (DOMINO)模型样例
+│   │   ├─infer_with_torch                      # PUMA模型torch推理样例
+│   │   └─train                                 # PUMA模型训练样例
 │   ├─smolvla                                   # SmolVLA模型样例
 │   │   └─train                                 # SmolVLA模型训练样例
 │   ├─Isaac-GR00T                               # Isaac-GR00T N1.6模型样例
