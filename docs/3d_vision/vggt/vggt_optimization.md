@@ -77,7 +77,7 @@ def _apply_1d_rope(
 ```
 
 #### 冗余操作去除
-- **优化原因：** 在vggt的Attention网络rope模块实现中，每次计算都需要重新计算cos和sin值，存在冗余计算，具体如下： 
+- **优化原因：** 在vggt的Attention网络rope模块实现中，每次计算都需要重新计算cos和sin值，存在冗余计算，具体如下：
     - `vggt/layers/rope.py`文件中_apply_1d_rope函数通过`cos = F.embedding(positions, cos_comp)[:, None, :, :]` 和`sin = F.embedding(positions, sin_comp)[:, None, :, :]`分别计算cos和sin变量。
     - `vggt/layers/rope.py`文件中forward函数需要通过max函数计算输入变量positions的最大值。
     - 每次对q变量和k变量进行rope计算时，都需要分别在垂直维度和水平维度计算cos和sin，并且计算positions的最大值。
@@ -214,7 +214,7 @@ nn.LayerNorm.forward = vggt_layernorm_forward
 
 ### 使用INT8权重
 - **优化原因：** 目前vggt网络的Linear层使用W8A8量化精度可控(下降1%以内)，考虑将vggt网络权重离线转为int8。
-- **优化方式：** 将部分Linear层的激活使用动态per-token量化，权重使用静态per-channel量化。fp32(原始)模型大小为4.9GB，bf16模型大小为2.46GB，int8模型大小为2.16G. 相机位姿估算任务精度相比bf16，精度从0.911下降至0.907，精度损失在0.5%以内。。
+- **优化方式：** 将部分Linear层的激活使用动态per-token量化，权重使用静态per-channel量化。fp32(原始)模型大小为4.9GB，bf16模型大小为2.46GB，int8模型大小为2.16G. 相机位姿估算任务精度相比bf16，精度从0.911下降至0.907，精度损失在0.5%以内。
 - **使能方式：** 默认关闭，使能需将enableW8A8设为True。
 
 ### 卷积核私有格式提前转换
@@ -266,7 +266,7 @@ if self.is_global_attention:
     # Global用FIA
     x = torch_npu.npu_fused_infer_attention_score(
         q, k, v, num_heads=num_heads, scale=scale,
-        input_layout="BNSD", pre_tokens=65535, 
+        input_layout="BNSD", pre_tokens=65535,
         next_tokens=65535, inner_precise=0
     )[0]
 else:
@@ -279,7 +279,7 @@ else:
 - **优化方式：**
 
   1.Ulysses并行将num_heads维度切分到多卡，通过all-to-all通信将序列维度聚合，使每个rank能看到完整序列但只处理部分attention heads。
-  
+
   2.Ring并行将序列切分到多卡，通过overlap策略隐藏通信开销：利用NPU FIA算子返回的LSE（log-sum-exp）信息，支持分块attention结果的数值稳定合并。
 ```python
 # Ulysses并行（头维度切分）
