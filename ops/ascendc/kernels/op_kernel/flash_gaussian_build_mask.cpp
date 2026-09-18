@@ -156,7 +156,7 @@ public:
         this->_pipe->InitBuffer(ComputingTensorBuffer, baseBufferSize * COMPUTE_BUFFER_NUM);
         this->_pipe->InitBuffer(CompareTensorBuffer, taskNumPerLoop * COMPARE_BUFFER_NUM);
         this->_pipe->InitBuffer(GatherIndexTensorBuffer, baseBufferSize);
-        this->_pipe->InitBuffer(TileSumTensorBuffer, tileNumPerCore);
+        this->_pipe->InitBuffer(TileSumTensorBuffer, tileNumPerCore * sizeof(int32_t));
 
         InputTensor = InputTensorBuffer.Get<DTYPE_MEANS2D>();
         MaskTensor = MaskTensorBuffer.Get<float>();
