@@ -17,7 +17,7 @@ __all__ = [
     "projection_three_dims_gaussian_fused",
     "calc_render",
     "gaussian_sort",
-    "smart_get_render_schedule_cpp",
+    "get_render_schedule",
     "spherical_harmonics",
     "flash_gaussian_build_mask",
     "gaussian_filter",
