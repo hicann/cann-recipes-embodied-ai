@@ -35,7 +35,7 @@ This script is adapted for **Ascend OM-only** inference:
 
 """
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from pprint import pformat
 
