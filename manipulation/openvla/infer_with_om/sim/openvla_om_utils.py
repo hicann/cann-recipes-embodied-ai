@@ -109,7 +109,7 @@ class AclLiteResource:
             logging.info("acl resource release context")
             acl.rt.destroy_context(self.context)
 
-        logging.info("Reset acl device ", self.device_id)
+        logging.info("Reset acl device %s", self.device_id)
         acl.rt.reset_device(self.device_id)
         logging.info("Release acl resource success")
 
