@@ -148,6 +148,7 @@ mesh = pipeline(mesh, image='assets/demo.png')
 ```
 **Hunyuan3D-DiT**执行过程中，我们在NPU环境下提供多视角模型推理，具体方式如下：
 ```python
+import torch
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
 from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
 from torch_npu.contrib import transfer_to_npu
@@ -173,7 +174,7 @@ mesh = pipeline(
 )[0]
 
 pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
-mesh = pipeline(mesh, image=list(image.values()))
+mesh = pipeline(mesh, image=list(images.values()))
 ```
 
 ## Citation
