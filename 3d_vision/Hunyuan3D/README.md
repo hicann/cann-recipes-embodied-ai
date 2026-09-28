@@ -117,7 +117,7 @@ python minimal_demo_npu.py
 ``` minimal_demo_npu.py```采用默认设置执行单图像推理，输入图片默认读取当前目录下的 `assets/demo.png`，生成结果默认输出到当前目录下的 `outputs/`。运行不同配置可参考以下脚本执行：
 
 ```bash
-python minimal_demo_npu.py --model_path tencent/Hunyuan3D-2 --multiview --face_reduce --full_graph --multi_thread (--use_render_npu) --save_render 
+python minimal_demo_npu.py --model_path tencent/Hunyuan3D-2 --multiview --face_reduce --full_graph --multi_thread --save_render
 ```
 ```model_path``` 选择模型路径，```multiview``` 设置是否采用多视角推理，```face_reduce``` 设置是否减少三角面片，```full_graph```设置是否采用图模式，```multi_thread```设置是否采用多线程并行执行光栅化，```use_render_npu```设置是否采用npu方式执行光栅化（不能与```multi_thread```共同使用），```save_render```设置是否复用光栅化结果。
 
