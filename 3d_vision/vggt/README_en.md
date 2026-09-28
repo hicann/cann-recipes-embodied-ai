@@ -1,6 +1,6 @@
 # VGGT Model Inference Adaptation on Ascend Atlas A2/A3
 
-This sample completes the inference adaptation of the VGGT model on NPU based on the [VGGT open-source model](https://github.com/facebookresearch/vggt), and provides accuracy evaluation scripts for three tasks: camera pose estimation, point cloud reconstruction, and depth estimation. For detailed information, please refer to the [Accuracy Evaluation Chapter](https://gitcode.com/cann/cann-recipes-embodied-ai/blob/master/docs/3d_vision/vggt/vggt_accurancy_evaluation.md).
+This sample completes the inference adaptation of the VGGT model on NPU based on the [VGGT open-source model](https://github.com/facebookresearch/vggt), and provides accuracy evaluation scripts for three tasks: camera pose estimation, point cloud reconstruction, and depth estimation. For detailed information, please refer to the [Accuracy Evaluation Chapter](https://gitcode.com/cann/cann-recipes-embodied-ai/blob/master/docs/3d_vision/vggt/vggt_accuracy_evaluation.md).
 
 Additionally, this sample has optimized the VGGT model performance on NPU. Currently, with 25 images as input, the inference time has been reduced to 1.12 seconds. For detailed information, please refer to the [Performance Optimization Chapter](https://gitcode.com/cann/cann-recipes-embodied-ai/blob/master/docs/3d_vision/vggt/vggt_optimization.md).
 

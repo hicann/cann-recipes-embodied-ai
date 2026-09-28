@@ -1,5 +1,5 @@
 # 在昇腾Atlas A2/A3环境上适配VGGT模型的推理
-本样例基于[VGGT开源模型](https://github.com/facebookresearch/vggt)完成其在NPU上的推理适配，并提供其在相机位姿估计、点云重建、深度估计三个任务上的精度评测脚本。详细内容可至[精度评测章节](https://gitcode.com/cann/cann-recipes-embodied-ai/blob/master/docs/3d_vision/vggt/vggt_accurancy_evaluation.md)查看。
+本样例基于[VGGT开源模型](https://github.com/facebookresearch/vggt)完成其在NPU上的推理适配，并提供其在相机位姿估计、点云重建、深度估计三个任务上的精度评测脚本。详细内容可至[精度评测章节](https://gitcode.com/cann/cann-recipes-embodied-ai/blob/master/docs/3d_vision/vggt/vggt_accuracy_evaluation.md)查看。
 
 此外，本样例基于VGGT模型在NPU进行了性能优化，目前VGGT模型在25张图片输入下，推理时间下降至1.12秒。详细内容可至[性能优化章节](https://gitcode.com/cann/cann-recipes-embodied-ai/blob/master/docs/3d_vision/vggt/vggt_optimization.md)查看。
 
