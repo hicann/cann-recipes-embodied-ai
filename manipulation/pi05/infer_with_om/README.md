@@ -353,7 +353,7 @@ python lerobot_eval_om.py \
 
 #### lerobot 根目录相关代码目录树
 
-- 检查整体代码目录树，经过上述的操作，pi05适配昇腾的lerobot根目录中的最终相关代码目录树如下所示：：
+- 检查整体代码目录树，经过上述的操作，pi05适配昇腾的lerobot根目录中的最终相关代码目录树如下所示：
 
 ```plaintext
 |-- pi05/infer_with_om
