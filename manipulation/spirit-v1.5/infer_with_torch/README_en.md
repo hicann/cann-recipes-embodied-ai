@@ -45,7 +45,7 @@ Ascend 310P Series
 
 This sample relies on the CANN development toolkit(cann-toolkit) and CANN binary operator package(cann-kernels). The supported CANN version is `CANN 8.3.RC1`.
 
-Download from the [software download page](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.3.RC1)`Ascend-cann-toolkit_8.3.RC1_linux-${arch}.run` and  `Ascend-cann-kernels_310p_8.3.RC1_linux-${arch}.run`，then complete installation by referring to the [CANN installation documentation](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1/softwareinst/instg/instg_quick.html?Mode=PmIns&InstallType=netconda&OS=openEuler&Software=cannToolKit).
+Download from the [software download page](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.3.RC1)`Ascend-cann-toolkit_8.3.RC1_linux-${arch}.run` and  `Ascend-cann-kernels_310p_8.3.RC1_linux-${arch}.run`, then complete installation by referring to the [CANN installation documentation](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1/softwareinst/instg/instg_quick.html?Mode=PmIns&InstallType=netconda&OS=openEuler&Software=cannToolKit).
 
 - `${arch}`denotes the CPU architecture; select either aarch64 or x86_64 matching your host machine.
 
