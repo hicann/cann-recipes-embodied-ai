@@ -1,0 +1,38 @@
+dataset:
+  repo_id: HuggingFaceVLA/libero
+  root: ../dataset/HuggingFaceVLA/libero
+
+policy:
+  type: xvla
+  device: npu
+  push_to_hub: false
+  pretrained_path: ../models/lerobot/xvla-base
+  dtype: bfloat16
+  action_mode: auto
+  max_action_dim: 20
+  empty_cameras: 1
+  num_denoising_steps: 10
+  tokenizer_max_length: 64
+  freeze_vision_encoder: false
+  freeze_language_encoder: false
+  train_policy_transformer: true
+  train_soft_prompts: true
+
+output_dir: ../ckpt/xvla_libero
+batch_size: 1
+job_name: xvla_libero
+resume: false
+seed: 1000
+num_workers: 4
+steps: 20000
+env_eval_freq: 0
+eval_steps: 0
+log_freq: 10
+save_checkpoint: true
+save_freq: 1000
+use_policy_training_preset: true
+
+wandb:
+  enable: false
+  project: xvla_libero
+  disable_artifact: true

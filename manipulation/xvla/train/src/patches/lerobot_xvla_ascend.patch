@@ -1,0 +1,305 @@
+diff --git a/src/lerobot/policies/xvla/configuration_xvla.py b/src/lerobot/policies/xvla/configuration_xvla.py
+index 614c9a94..933a4622 100644
+--- a/src/lerobot/policies/xvla/configuration_xvla.py
++++ b/src/lerobot/policies/xvla/configuration_xvla.py
+@@ -49,7 +49,7 @@ class XVLAConfig(PreTrainedConfig):
+     n_obs_steps: int = 1
+     chunk_size: int = 32
+     n_action_steps: int = 32
+-    dtype: str = "float32"  # Options: "bfloat16", "float32"
++    dtype: str = "float32"  # Options: "bfloat16", "float16", "float32"
+
+     normalization_mapping: dict[str, NormalizationMode] = field(
+         default_factory=lambda: {
+@@ -122,7 +122,7 @@ class XVLAConfig(PreTrainedConfig):
+             )
+         if self.num_image_views is not None and self.num_image_views <= 0:
+             raise ValueError("`num_image_views` must be > 0 when specified.")
+-        if self.dtype not in ["bfloat16", "float32"]:
++        if self.dtype not in ["bfloat16", "float16", "float32"]:
+             raise ValueError(f"Invalid dtype: {self.dtype}")
+         self._florence_config_obj: Florence2Config | None = None
+
+diff --git a/src/lerobot/policies/xvla/modeling_xvla.py b/src/lerobot/policies/xvla/modeling_xvla.py
+index 04e923fd..d21e76c3 100644
+--- a/src/lerobot/policies/xvla/modeling_xvla.py
++++ b/src/lerobot/policies/xvla/modeling_xvla.py
+@@ -48,6 +48,39 @@ else:
+     Florence2ForConditionalGeneration = None
+
+
++def _is_truthy_env(name: str) -> bool:
++    return os.environ.get(name, "0").strip().lower() in {"1", "true", "yes", "on"}
++
++
++def _inherit_pretrained_structure(config: PreTrainedConfig, pretrained_config: PreTrainedConfig) -> None:
++    if not isinstance(config, XVLAConfig) or not isinstance(pretrained_config, XVLAConfig):
++        return
++
++    structure_defaults = {
++        "chunk_size": 32,
++        "n_action_steps": 32,
++        "hidden_size": 1024,
++        "depth": 24,
++        "num_heads": 16,
++        "mlp_ratio": 4.0,
++        "num_domains": 30,
++        "len_soft_prompts": 32,
++        "dim_time": 32,
++        "max_len_seq": 512,
++        "use_hetero_proj": False,
++        "max_state_dim": 32,
++        "num_image_views": None,
++        "resize_imgs_with_padding": None,
++    }
++    for field_name, default_value in structure_defaults.items():
++        if getattr(config, field_name) == default_value:
++            setattr(config, field_name, getattr(pretrained_config, field_name))
++
++    if not config.florence_config:
++        config.florence_config = dict(pretrained_config.florence_config)
++        config._florence_config_obj = None
++
++
+ class XVLAModel(nn.Module):
+     """
+     XVLA backbone that stitches Florence-2 embeddings with the temporal/action transformer head.
+@@ -120,6 +153,8 @@ class XVLAModel(nn.Module):
+         """Get the target dtype based on config."""
+         if self.config.dtype == "bfloat16":
+             return torch.bfloat16
++        if self.config.dtype == "float16":
++            return torch.float16
+         return torch.float32
+
+     def _apply_dtype(self) -> None:
+@@ -127,7 +162,14 @@ class XVLAModel(nn.Module):
+         Apply dtype casting to model components based on config.
+         """
+         target_dtype = self._get_target_dtype()
+-        self.to(dtype=target_dtype)
++        try:
++            self.to(dtype=target_dtype)
++        except Exception:
++            if target_dtype is not torch.bfloat16 or not _is_truthy_env("LEROBOT_XVLA_BF16_FALLBACK_FP16"):
++                raise
++            logging.info("[WARN] requested bfloat16 but runtime failed to cast; falling back to float16.")
++            self.config.dtype = "float16"
++            self.to(dtype=torch.float16)
+
+     def _apply_freezing(self) -> None:
+         """
+@@ -447,8 +489,9 @@ class XVLAPolicy(PreTrainedPolicy):
+         """
+         import safetensors.torch
+
++        model_id = str(pretrained_name_or_path)
++
+         # step 1: load config
+-        # TODO: jadechoghari, fix this
+         if config is None:
+             config = PreTrainedConfig.from_pretrained(
+                 pretrained_name_or_path=pretrained_name_or_path,
+@@ -461,8 +504,19 @@ class XVLAPolicy(PreTrainedPolicy):
+                 revision=revision,
+                 **kwargs,
+             )
++        else:
++            pretrained_config = PreTrainedConfig.from_pretrained(
++                pretrained_name_or_path=pretrained_name_or_path,
++                force_download=force_download,
++                resume_download=resume_download,
++                proxies=proxies,
++                token=token,
++                cache_dir=cache_dir,
++                local_files_only=local_files_only,
++                revision=revision,
++            )
++            _inherit_pretrained_structure(config, pretrained_config)
+
+-        model_id = str(pretrained_name_or_path)
+         instance = cls(config, **kwargs)
+         # step 2: locate model.safetensors
+         if os.path.isdir(model_id):
+diff --git a/src/lerobot/policies/xvla/soft_transformer.py b/src/lerobot/policies/xvla/soft_transformer.py
+index 77ceb6e2..0e32b377 100644
+--- a/src/lerobot/policies/xvla/soft_transformer.py
++++ b/src/lerobot/policies/xvla/soft_transformer.py
+@@ -17,6 +17,7 @@
+ from __future__ import annotations
+
+ import math
++import os
+ from collections.abc import Iterable
+ from functools import partial
+ from typing import Final
+@@ -27,6 +28,11 @@ import torch.nn.functional as functional
+
+ # ------------------------------- Small utils ----------------------------------
+
++try:
++    import torch_npu
++except ImportError:
++    torch_npu = None
++
+
+ def _to_2tuple(x) -> tuple:
+     """Minimal replacement for timm.layers.to_2tuple."""
+@@ -41,6 +47,10 @@ def _has_sdp_attention() -> bool:
+     return hasattr(functional, "scaled_dot_product_attention")
+
+
++def _is_truthy_env(name: str) -> bool:
++    return os.environ.get(name, "0").strip().lower() in {"1", "true", "yes", "on"}
++
++
+ # ---------------------------------- MLP --------------------------------------
+
+
+@@ -144,7 +154,24 @@ class Attention(nn.Module):
+         q, k, v = qkv.unbind(0)  # each: [batch_size, num_heads, seq_len, head_dim]
+         q, k = self.q_norm(q), self.k_norm(k)
+
+-        if self.fused_attn:
++        use_npu_fusion_attention = (
++            torch_npu is not None
++            and q.device.type == "npu"
++            and _is_truthy_env("LEROBOT_XVLA_USE_NPU_FUSION_ATTENTION")
++        )
++        if use_npu_fusion_attention:
++            out = torch_npu.npu_fusion_attention(
++                q,
++                k,
++                v,
++                head_num=self.num_heads,
++                input_layout="BNSD",
++                scale=self.scale,
++                keep_prob=1.0 - (self.attn_drop.p if self.training else 0.0),
++                sparse_mode=0,
++            )
++            x = out[0] if isinstance(out, tuple) else out
++        elif self.fused_attn and not _is_truthy_env("LEROBOT_XVLA_DISABLE_SDPA"):
+             x = functional.scaled_dot_product_attention(
+                 q,
+                 k,
+@@ -249,7 +276,15 @@ class DomainAwareLinear(nn.Module):
+             squeeze_seq = True
+         weight = self.fc(domain_id).view(batch_size, self.input_size, self.output_size)
+         bias = self.bias(domain_id).view(batch_size, self.output_size)
+-        y = torch.matmul(x, weight) + bias.view(batch_size, 1, self.output_size)
++        use_npu_baddbmm = (
++            x.device.type == "npu"
++            and _is_truthy_env("LEROBOT_XVLA_USE_NPU_BADD_BMM")
++        )
++        if use_npu_baddbmm:
++            bias_expanded = bias.view(batch_size, 1, self.output_size).expand(-1, x.shape[1], -1)
++            y = torch.baddbmm(bias_expanded, x, weight)
++        else:
++            y = torch.matmul(x, weight) + bias.view(batch_size, 1, self.output_size)
+         if squeeze_seq:
+             y = y.squeeze(1)
+         return y
+diff --git a/src/lerobot/scripts/lerobot_eval.py b/src/lerobot/scripts/lerobot_eval.py
+index 722763d6..3f0180fe 100644
+--- a/src/lerobot/scripts/lerobot_eval.py
++++ b/src/lerobot/scripts/lerobot_eval.py
+@@ -52,6 +52,7 @@ You can learn about the CLI options for this script in the `EvalPipelineConfig`
+ import concurrent.futures as cf
+ import json
+ import logging
++import os
+ import threading
+ import time
+ from collections import defaultdict
+@@ -60,6 +61,7 @@ from contextlib import nullcontext
+ from copy import deepcopy
+ from dataclasses import asdict
+ from functools import partial
++import importlib
+ from pathlib import Path
+ from pprint import pformat
+ from typing import Any, TypedDict
+@@ -69,6 +71,14 @@ import gymnasium as gym
+ import numpy as np
+ import torch
+ from termcolor import colored
++try:
++    importlib.import_module("torch_npu")
++    torch_npu_available = True
++except ImportError:
++    torch_npu_available = False
++if torch_npu_available and os.environ.get("LEROBOT_EVAL_NPU_DEVICE"):
++    torch.npu.set_device(os.environ["LEROBOT_EVAL_NPU_DEVICE"])
++
+ from torch import Tensor, nn
+ from tqdm import trange
+
+diff --git a/src/lerobot/scripts/lerobot_train.py b/src/lerobot/scripts/lerobot_train.py
+index 6e845852..bc5428f4 100644
+--- a/src/lerobot/scripts/lerobot_train.py
++++ b/src/lerobot/scripts/lerobot_train.py
+@@ -19,6 +19,7 @@ Requires: pip install 'lerobot[training]'  (includes dataset + accelerate + wand
+ """
+
+ import dataclasses
++import importlib
+ import logging
+ import sys
+ import time
+@@ -30,6 +31,10 @@ if TYPE_CHECKING:
+     from accelerate import Accelerator
+
+ import torch
++try:
++    importlib.import_module("torch_npu")
++except ImportError:
++    pass
+ from termcolor import colored
+ from torch.optim import Optimizer
+ from tqdm import tqdm
+diff --git a/src/lerobot/utils/device_utils.py b/src/lerobot/utils/device_utils.py
+index 37981f07..5cc97cc1 100644
+--- a/src/lerobot/utils/device_utils.py
++++ b/src/lerobot/utils/device_utils.py
+@@ -24,6 +24,9 @@ def auto_select_torch_device() -> torch.device:
+     if torch.cuda.is_available():
+         logging.info("Cuda backend detected, using cuda.")
+         return torch.device("cuda")
++    elif hasattr(torch, "npu") and torch.npu.is_available():
++        logging.info("Ascend NPU backend detected, using npu.")
++        return torch.device("npu")
+     elif torch.backends.mps.is_available():
+         logging.info("Metal backend detected, using mps.")
+         return torch.device("mps")
+@@ -67,6 +70,8 @@ def get_safe_dtype(dtype: torch.dtype, device: str | torch.device):
+         device = device.type
+     if device == "mps" and dtype == torch.float64:
+         return torch.float32
++    if device == "npu" and dtype == torch.float64:
++        return torch.float32
+     if device == "xpu" and dtype == torch.float64:
+         if hasattr(torch.xpu, "get_device_capability"):
+             device_capability = torch.xpu.get_device_capability()
+@@ -90,6 +95,8 @@ def is_torch_device_available(try_device: str) -> bool:
+     try_device = str(try_device)  # Ensure try_device is a string
+     if try_device.startswith("cuda"):
+         return torch.cuda.is_available()
++    elif try_device.startswith("npu"):
++        return hasattr(torch, "npu") and torch.npu.is_available()
+     elif try_device == "mps":
+         return torch.backends.mps.is_available()
+     elif try_device == "xpu":
+@@ -97,11 +104,11 @@ def is_torch_device_available(try_device: str) -> bool:
+     elif try_device == "cpu":
+         return True
+     else:
+-        raise ValueError(f"Unknown device {try_device}. Supported devices are: cuda, mps, xpu or cpu.")
++        raise ValueError(f"Unknown device {try_device}. Supported devices are: cuda, npu, mps, xpu or cpu.")
+
+
+ def is_amp_available(device: str):
+-    if device in ["cuda", "xpu", "cpu"]:
++    if device in ["cuda", "npu", "xpu", "cpu"]:
+         return True
+     elif device == "mps":
+         return False
