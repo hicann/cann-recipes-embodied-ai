@@ -51,6 +51,8 @@ This sample supports inference on the Ascend Atlas A3 environment (910C).
 ### Datasets and Model Weights
 
 **Waymo Dataset**
+- **Data preprocessing environment:** Model inference and raw Waymo data preprocessing use separate environments. Because the official `waymo-open-dataset-tf-2-11-0==1.6.1` package only provides Linux x86_64 wheels, Waymo preprocessing should currently be performed on **Linux x86_64 with Python 3.10**. Copy or mount the generated data to the Atlas A3/910C environment for inference and evaluation. This step can be skipped when using the provided preprocessed demo data.
+
 - Prepare the Waymo Open Dataset [the full dataset, or you can use our provided demo data for a quick start]. Please refer to the [Waymo data guide](docs/WAYMO.md).
 
 - We provide the SLARM weights and demo dataset, which users can obtain from the following link: [weights and demo dataset](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-ai/SLARM/SLARM.zip).

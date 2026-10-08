@@ -51,6 +51,8 @@ SLARM在动态估计、渲染质量、场景解析等多项任务上达到**SOTA
 ### 数据集和模型权重
 
 **Waymo数据集**
+- **数据预处理环境说明：** 本案例的模型推理与Waymo原始数据预处理使用不同环境。由于`waymo-open-dataset-tf-2-11-0==1.6.1`官方仅提供Linux x86_64 wheel，当前请在**Linux x86_64 + Python 3.10**环境中完成Waymo数据预处理。完成后，将生成的数据复制或挂载到Atlas A3/910C环境进行模型推理和评测。使用本案例提供的已预处理demo数据时，可跳过该步骤。
+
 - 准备Waymo Open Dataset【全量数据集，也可使用我们提供的demo数据快速实现】，请参考[Waymo数据说明](docs/WAYMO.md)。
 
 - 我们提供了SLARM的权重和demo数据集，用户可以以下链接获取：[权重和demo数据集](https://cann-ai.obs.cn-north-4.myhuaweicloud.com/cann-recipes-embodied-ai/SLARM/SLARM.zip)。
