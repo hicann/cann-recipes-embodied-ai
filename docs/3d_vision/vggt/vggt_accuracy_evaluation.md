@@ -75,7 +75,6 @@
    python eval_co3d.py --co3d_dir $VGGT_DIR/datasets/co3d/co3d_data/ --co3d_anno_dir $VGGT_DIR/datasets/co3d/co3d_anno/  --ckpt $VGGT_DIR/ckpt/model.pt
    
    # use bf16_sp model
-   cd eval/pose_evaluation
    torchrun --nproc_per_node=1 eval_co3d.py \
     --ckpt $VGGT_DIR/ckpt/model.pt \
     --co3d_dir $VGGT_DIR/datasets/co3d/co3d_data/ \
@@ -85,7 +84,6 @@
     --ring_degree 1
     
    # use int8 model
-   cd eval/pose_evaluation
    python eval_co3d.py --co3d_dir $VGGT_DIR/datasets/co3d/co3d_data/ --co3d_anno_dir $VGGT_DIR/datasets/co3d/co3d_anno/  --ckpt ../../VGGT_model_W8A8.pt --enableW8A8
    ```
 ### 点云三维重建
