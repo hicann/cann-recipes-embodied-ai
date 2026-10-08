@@ -467,7 +467,7 @@ class AgiBotWorldTextControlDataset(Dataset):
         abs_action_b, _ = parse_h5(h5_b, slices=relative_indices_b, delta_act_sidx=1)
 
         # --- Concatenate all ---
-        if raw_frames_a and raw_frames_b:
+        if raw_frames_a is not None and raw_frames_b is not None:
             raw_frames_all = np.concatenate([raw_frames_a, raw_frames_b], axis=0)
             w2cs_all = torch.cat([w2cs_a, w2cs_b], dim=0)
             abs_action_all = np.concatenate([abs_action_a, abs_action_b], axis=0)
