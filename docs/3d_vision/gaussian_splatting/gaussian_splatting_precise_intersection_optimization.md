@@ -1,14 +1,14 @@
 # NPU 3DGS Ascend C Precise Intersection算子优化
 ## Outline
 - [HighLights](#highlights)
-- [Precise Intersection算法](#PreciseIntersection算法)
-    - [Precise Intersection算子Tiling设计](#PreciseIntersection算子tiling设计)
+- [Precise Intersection算法](#precise-intersection算法)
+    - [Precise Intersection算子Tiling设计](#precise-intersection算子tiling设计)
     - [Vector-MTE流水并行优化](#vector-mte流水并行优化)
     - [高斯球坐标初筛优化](#高斯球坐标初筛优化)
     - [掩码过滤优化](#掩码过滤优化)
     - [计算优化](#计算优化)
     - [性能实验](#性能实验)
-- [Citation](#Citation)
+- [Citation](#citation)
 
 ## Highlights
 Precise Intersection算子用于计算高斯球-像素块映射关系，基于[FlashGS算法](https://arxiv.org/abs/2408.07967)实现，具有以下特点和优势：
